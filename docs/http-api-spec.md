@@ -99,6 +99,62 @@ touch Wallet Lab, or trigger production actions.
 Agent identity records are audit metadata only. They do not create accounts,
 grant wallet authority, imply third-party affiliation, or bypass human review.
 
+## Optional boundary and audit metadata
+
+Responses may include a `boundary` decision and an `audit` event. These fields
+make referee-style checks visible to agents and humans without granting any
+extra authority.
+
+```json
+{
+  "boundary": {
+    "action": "submit_command",
+    "allowed": true,
+    "sandboxOnly": true,
+    "policy": "sandbox-gameplay-only",
+    "reason": "Command accepted as inert sandbox gameplay text.",
+    "blockedCapabilities": [
+      "walletActionsEnabled",
+      "feedbackCanMutateGameplay",
+      "externalUrlFetchEnabled",
+      "codeExecutionEnabled",
+      "secretsAccessEnabled",
+      "productionMutationEnabled"
+    ],
+    "reviewedBy": "iocalc-referee-0001"
+  },
+  "audit": {
+    "id": "audit-000001",
+    "at": "2026-06-26T00:00:00Z",
+    "type": "command-submitted",
+    "sandboxId": "demo",
+    "action": "submit_command",
+    "commandSource": "human",
+    "summary": "Accepted inert sandbox command.",
+    "boundary": {
+      "action": "submit_command",
+      "allowed": true,
+      "sandboxOnly": true,
+      "policy": "sandbox-gameplay-only",
+      "reason": "Command accepted as inert sandbox gameplay text.",
+      "blockedCapabilities": [
+        "walletActionsEnabled",
+        "feedbackCanMutateGameplay",
+        "externalUrlFetchEnabled",
+        "codeExecutionEnabled",
+        "secretsAccessEnabled",
+        "productionMutationEnabled"
+      ],
+      "reviewedBy": "iocalc-referee-0001"
+    }
+  }
+}
+```
+
+Boundary and audit records are descriptive only. They must not become accounts,
+sessions, wallet approvals, production approvals, financial approvals, feedback
+trust signals, or executable instructions.
+
 ## Requirements
 
 - Commands are untrusted game text.

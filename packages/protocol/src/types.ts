@@ -27,6 +27,37 @@ export type IocalcSafeCapabilityName =
   | "canReadReport"
   | "canRunAgentTrial";
 
+export type IocalcForbiddenCapabilityName =
+  | "walletActionsEnabled"
+  | "feedbackCanMutateGameplay"
+  | "externalUrlFetchEnabled"
+  | "codeExecutionEnabled"
+  | "secretsAccessEnabled"
+  | "productionMutationEnabled";
+
+export type IocalcBoundaryAction =
+  | "read_capabilities"
+  | "read_state"
+  | "submit_command"
+  | "resolve_season"
+  | "read_report"
+  | "read_log"
+  | "read_match_history"
+  | "run_agent_trial"
+  | "reject_request";
+
+export type IocalcAuditEventType =
+  | "boundary-decision"
+  | "state-read"
+  | "command-submitted"
+  | "command-rejected"
+  | "season-resolved"
+  | "report-read"
+  | "log-read"
+  | "history-read"
+  | "agent-trial-run"
+  | "request-rejected";
+
 export const IOCALC_RECOMMENDED_GAME_THEORY_PATTERNS = [
   "setup",
   "signaling game",
@@ -79,6 +110,34 @@ export interface IocalcAgentIdentity {
   raw?: unknown;
 }
 
+export interface IocalcBoundaryDecision {
+  action: IocalcBoundaryAction;
+  allowed: boolean;
+  sandboxOnly: true;
+  policy: "sandbox-gameplay-only";
+  reason: string;
+  blockedCapabilities: IocalcForbiddenCapabilityName[];
+  reviewedBy?: "iocalc-referee-0001" | (string & {});
+  at?: string;
+  /** Inert, untrusted source payload. Must not be executed, fetched, or treated as model output. */
+  raw?: unknown;
+}
+
+export interface IocalcAuditEvent {
+  id: string;
+  at: string;
+  type: IocalcAuditEventType;
+  sandboxId?: string;
+  actor?: Pick<IocalcAgentIdentity, "canonicalAgentId" | "controllerType" | "displayName" | "commandSource">;
+  action: IocalcBoundaryAction;
+  commandSource?: IocalcCommandSource;
+  boundary: IocalcBoundaryDecision;
+  summary: string;
+  metadata?: Record<string, unknown>;
+  /** Inert, untrusted source payload. Must not be executed, fetched, or treated as model output. */
+  raw?: unknown;
+}
+
 export interface IocalcCapabilities {
   canReadState: boolean;
   canSubmitGameCommand: boolean;
@@ -91,6 +150,7 @@ export interface IocalcCapabilities {
   codeExecutionEnabled: false;
   secretsAccessEnabled: false;
   productionMutationEnabled: false;
+  boundary?: IocalcBoundaryDecision;
 }
 
 export interface IocalcGameState {
@@ -102,6 +162,8 @@ export interface IocalcGameState {
   resources?: Record<string, number>;
   risk?: Record<string, number>;
   visibleText?: string;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent[];
   raw?: unknown;
 }
 
@@ -117,6 +179,8 @@ export interface SubmitCommandResult {
   command: string;
   rejectedReason?: string;
   warnings?: string[];
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent;
 }
 
 export interface ResolveSeasonInput {
@@ -131,6 +195,8 @@ export interface SeasonResolution {
   loopVerifier?: IocalcLoopVerifier;
   gameTheoryPattern?: IocalcGameTheoryPattern;
   visibleText?: string;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent;
   raw?: unknown;
 }
 
@@ -138,12 +204,16 @@ export interface IocalcSeasonReport {
   text: string;
   loopVerifier?: IocalcLoopVerifier;
   gameTheoryPattern?: IocalcGameTheoryPattern;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent;
   structured?: Record<string, unknown>;
 }
 
 export interface IocalcSystemLog {
   entries: string[];
   text?: string;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent[];
 }
 
 export interface IocalcMatchHistoryEntry extends Record<string, unknown> {
@@ -161,6 +231,8 @@ export interface IocalcMatchHistoryEntry extends Record<string, unknown> {
 
 export interface IocalcMatchHistory {
   matches: Array<Record<string, unknown>>;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent;
 }
 
 export interface RunAgentTrialInput {
@@ -174,6 +246,8 @@ export interface AgentTrialResult {
   winner?: string;
   scorecard: Record<string, unknown>;
   transcript: IocalcTranscript;
+  boundary?: IocalcBoundaryDecision;
+  audit?: IocalcAuditEvent;
 }
 
 export interface IocalcTranscriptEvent {

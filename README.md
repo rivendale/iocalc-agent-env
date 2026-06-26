@@ -33,6 +33,11 @@ command source, timeout/fallback events, and review notes. Identity records are
 audit metadata only; they do not create accounts, grant wallet authority, imply
 third-party affiliation, or bypass human review.
 
+Compatible responses may also include optional `boundary` and `audit` records.
+These records explain why a sandbox action was allowed or rejected and record
+the inert gameplay action that occurred. They are not permissions, accounts,
+wallet approvals, production approvals, or feedback trust signals.
+
 ## Core contract
 
 ```ts
