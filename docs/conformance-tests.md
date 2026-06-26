@@ -19,3 +19,7 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 - Commands are treated as untrusted game text.
 - Browser selectors exist and are stable.
 - Agent trial transcript contains state, command, resolution, report, and log events.
+- Loop transcript entries can record objective, hypothesis, action,
+  observedOutcome, verifierNotes, and nextPolicy without mutating game logic.
+- Game-theory pattern reports can explain payoff, signaling, repeated-game, or
+  equilibrium-break tradeoffs without adding market data or financial behavior.

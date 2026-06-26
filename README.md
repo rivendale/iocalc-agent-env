@@ -11,6 +11,13 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 - `@iocalc/conformance` — safety and compatibility assertions for IOCALC-compatible implementations.
 - `@iocalc/mcp-server` — MCP server scaffold exposing sandbox game tools only.
 
+## Design docs
+
+- `docs/loop-engineering.md` — IOCALC loop vocabulary for observe, command,
+  resolve, verify, and revise cycles.
+- `docs/game-theory-patterns.md` — safe sandbox game-theory patterns for
+  settlement strategy and agent learning.
+
 ## Core contract
 
 ```ts
