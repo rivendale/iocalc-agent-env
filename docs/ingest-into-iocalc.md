@@ -28,6 +28,34 @@ GET  /api/game/match-history
 POST /api/game/agent-trial
 ```
 
+## Current IOCALC game implementation notes
+
+Inspection date: 2026-06-26.
+
+The current game repo is a browser-native app served from `web/` by
+`tools/game_server.py`. The public server currently exposes static routes plus
+append-only feedback routes (`/api/feedback` and `/api/recommend`). Gameplay
+state and season resolution live in `web/game.js` and persist in browser
+`localStorage`. Wallet Lab lives under `/wallet` and `web/wallet.js`; it is
+read-only and out of scope for this protocol.
+
+Do not implement `/api/game/*` by copying or reimplementing the resolver in a
+second language. That would make browser play and agent play drift apart.
+
+Recommended safe sequence:
+
+1. Add the stable browser selectors below and keep the existing browser smoke
+   tests passing.
+2. Extract the deterministic state, command normalization, submission, season
+   resolution, report, log, and match-history helpers from `web/game.js` into a
+   shared sandbox game-core module used by the browser.
+3. Add focused tests for that shared game-core module: Human vs AI, Agent Trials,
+   timeout fallback, command source reporting, and match history.
+4. Add `/api/game/*` only after the server can call the same shared game core or
+   an equivalent imported local-core adapter without touching Wallet Lab,
+   feedback trust, secrets, deployments, production data, or real assets.
+5. Update `llms.txt` and boundary docs only after the sandbox API exists.
+
 ## Stable browser selectors
 
 Add these selectors to the play UI so browser agents and Playwright tests can operate the same public surface as a human:
