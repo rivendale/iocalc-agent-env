@@ -33,6 +33,10 @@ export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
   {
     name: "iocalc.get_match_history",
     description: "Read sandbox match history."
+  },
+  {
+    name: "iocalc.run_agent_trial",
+    description: "Run a sandbox-only IOCALC agent trial when the target adapter supports it."
   }
 ];
 

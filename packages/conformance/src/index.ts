@@ -1,4 +1,9 @@
-import { assertSafeCapabilities, type IocalcPlayerAdapter } from "@iocalc/protocol";
+import {
+  assertSafeCapabilities,
+  normalizeGameCommand,
+  type IocalcPlayerAdapter,
+  type SubmitCommandInput
+} from "@iocalc/protocol";
 
 export interface ConformanceResult {
   name: string;
@@ -44,9 +49,63 @@ export async function runReadConformance(adapter: IocalcPlayerAdapter): Promise<
   return results;
 }
 
+export function runCommandValidationConformance(): ConformanceResult[] {
+  const empty = normalizeGameCommand("   ");
+  const safe = normalizeGameCommand(" repair wall and gather wood ");
+  const link = normalizeGameCommand("review https://example.invalid but do not fetch it");
+
+  return [
+    {
+      name: "reject-empty-command",
+      passed: !empty.accepted,
+      message: empty.accepted ? "Empty command was accepted." : undefined
+    },
+    {
+      name: "normalize-safe-command",
+      passed: safe.accepted && safe.command === "repair wall and gather wood",
+      message: safe.accepted ? undefined : safe.rejectedReason
+    },
+    {
+      name: "link-text-warning",
+      passed: link.accepted && link.warnings.some((warning) => warning.includes("must not fetch")),
+      message: "Commands with links must remain inert text."
+    }
+  ];
+}
+
+export async function runSubmitCommandConformance(
+  adapter: IocalcPlayerAdapter,
+  input: SubmitCommandInput = {
+    mode: "season_duel",
+    command: "repair wall and gather wood",
+    seed: "conformance-seed"
+  }
+): Promise<ConformanceResult[]> {
+  try {
+    const result = await adapter.submitCommand(input);
+    const commandDoesNotClaimWalletAccess = !/\b(wallet|transaction|private key|seed phrase)\b/i.test(result.command);
+    return [
+      {
+        name: "submit-sandbox-command",
+        passed: result.accepted && commandDoesNotClaimWalletAccess,
+        message: result.accepted ? undefined : result.rejectedReason
+      }
+    ];
+  } catch (error) {
+    return [
+      {
+        name: "submit-sandbox-command",
+        passed: false,
+        message: error instanceof Error ? error.message : String(error)
+      }
+    ];
+  }
+}
+
 export async function runAdapterConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
   return [
     ...(await runSafetyConformance(adapter)),
+    ...runCommandValidationConformance(),
     ...(await runReadConformance(adapter))
   ];
 }

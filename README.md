@@ -6,7 +6,7 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 
 ## Packages
 
-- `@iocalc/protocol` — shared types, safe capabilities, transcript helpers, and runtime schemas.
+- `@iocalc/protocol` — shared types, safe capabilities, transcript helpers, and runtime command validation.
 - `@iocalc/adapters` — manual transcript, HTTP, browser, MCP, and local-core adapter implementations or stubs.
 - `@iocalc/conformance` — safety and compatibility assertions for IOCALC-compatible implementations.
 - `@iocalc/mcp-server` — MCP server scaffold exposing sandbox game tools only.
