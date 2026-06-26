@@ -56,6 +56,25 @@ const adapter = new HttpIocalcAdapter({
 });
 ```
 
+Browser agents can play through the public UI with a Playwright-compatible page
+object and the fixed IOCALC selectors:
+
+```ts
+const adapter = new BrowserIocalcAdapter({
+  page,
+  baseUrl: "http://127.0.0.1:8090"
+});
+
+await adapter.submitCommand({ mode: "season_duel", command: "repair wall and gather wood" });
+await adapter.resolveSeason();
+```
+
+The browser adapter uses only fixed gameplay selectors, does not evaluate page
+JavaScript, does not follow command links, and does not interact with Wallet Lab.
+If `baseUrl` is supplied, it must target localhost/127.0.0.1/[::1] or
+HTTPS `play.iocalc.com` at the play UI root or `/play`; other browser pages should be
+opened and trusted by the caller before constructing the adapter.
+
 To run the local HTTP conformance example against a running IOCALC game server:
 
 ```bash
@@ -85,4 +104,4 @@ Forbidden:
 
 ## Status
 
-Initial scaffold. The protocol and HTTP/manual adapters are designed to be ingested by `iocalc.com` / `play.iocalc.com` through `/api/game/*` sandbox endpoints.
+Initial scaffold. The protocol and HTTP/manual/browser adapters are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and future `/api/game/*` sandbox endpoints.

@@ -14,7 +14,13 @@ import {
   runResolveSeasonConformance,
   runSubmitCommandConformance
 } from "../packages/conformance/dist/index.js";
-import { HttpIocalcAdapter, ManualTranscriptAdapter, createIocalcAdapter } from "../packages/adapters/dist/index.js";
+import {
+  BROWSER_IOCALC_SELECTORS,
+  BrowserIocalcAdapter,
+  HttpIocalcAdapter,
+  ManualTranscriptAdapter,
+  createIocalcAdapter
+} from "../packages/adapters/dist/index.js";
 
 assertSafeCapabilities(DEFAULT_SAFE_CAPABILITIES);
 
@@ -154,6 +160,194 @@ await factoryAdapter.getCapabilities();
 assert.equal(capturedRequests.at(-1).url.includes("sandboxId=factory-sandbox"), true);
 
 globalThis.fetch = originalFetch;
+
+function createFakeBrowserPage() {
+  const values = new Map([
+    [BROWSER_IOCALC_SELECTORS.seasonCommand, ""],
+    [BROWSER_IOCALC_SELECTORS.resolveSeason, "Resolve"],
+    [BROWSER_IOCALC_SELECTORS.seasonReport, "Season 0\nAwaiting orders."],
+    [BROWSER_IOCALC_SELECTORS.systemLog, "System online."],
+    [BROWSER_IOCALC_SELECTORS.matchHistory, "Season 0: setup"],
+    [BROWSER_IOCALC_SELECTORS.agentTrialsPanel, "Agent Trials visible."]
+  ]);
+  const page = {
+    gotoCalls: [],
+    waitStates: [],
+    fills: [],
+    clicks: [],
+    currentUrl: "about:blank",
+    season: 0,
+    goto(url, options) {
+      this.gotoCalls.push({ url, options });
+      this.currentUrl = url;
+    },
+    waitForLoadState(state, options) {
+      this.waitStates.push({ state, options });
+    },
+    url() {
+      return this.currentUrl;
+    },
+    locator(selector) {
+      return {
+        count: () => (values.has(selector) ? 1 : 0),
+        fill: (value) => {
+          page.fills.push({ selector, value });
+          values.set(selector, value);
+        },
+        click: () => {
+          page.clicks.push(selector);
+          if (selector === BROWSER_IOCALC_SELECTORS.resolveSeason) {
+            page.season += 1;
+            values.set(
+              BROWSER_IOCALC_SELECTORS.seasonReport,
+              `Season ${page.season}\nReport: repaired the wall and gathered wood.`
+            );
+            values.set(
+              BROWSER_IOCALC_SELECTORS.systemLog,
+              `Season ${page.season}: command source browser; fallback false.`
+            );
+            values.set(BROWSER_IOCALC_SELECTORS.matchHistory, `Season ${page.season}: browser command resolved`);
+          }
+        },
+        innerText: () => values.get(selector) ?? "",
+        textContent: () => values.get(selector) ?? ""
+      };
+    }
+  };
+  return page;
+}
+
+const fakeBrowserPage = createFakeBrowserPage();
+const browserAdapter = new BrowserIocalcAdapter({
+  page: fakeBrowserPage,
+  baseUrl: "http://127.0.0.1:8090/play"
+});
+const browserCapabilities = await browserAdapter.getCapabilities();
+assertSafeCapabilities(browserCapabilities);
+assert.equal(browserCapabilities.canRunAgentTrial, false);
+assert.equal(fakeBrowserPage.gotoCalls[0].url, "http://127.0.0.1:8090/play");
+
+const browserAccepted = await browserAdapter.submitCommand({
+  mode: "season_duel",
+  command: " build farms, repair damage, fortify the wall, scout the rival "
+});
+assert.equal(browserAccepted.accepted, true);
+assert.equal(fakeBrowserPage.fills[0].selector, BROWSER_IOCALC_SELECTORS.seasonCommand);
+assert.equal(fakeBrowserPage.fills[0].value, "build farms, repair damage, fortify the wall, scout the rival");
+
+const browserRejectedWallet = await browserAdapter.submitCommand({
+  mode: "season_duel",
+  command: "withdraw wallet tokens"
+});
+assert.equal(browserRejectedWallet.accepted, false);
+assert.equal(browserRejectedWallet.boundary.allowed, false);
+assert.equal(fakeBrowserPage.fills.length, 1);
+assert.equal(fakeBrowserPage.clicks.length, 0);
+
+const browserRejectedLink = await browserAdapter.submitCommand({
+  mode: "season_duel",
+  command: "repair wall then review https://example.invalid"
+});
+assert.equal(browserRejectedLink.accepted, false);
+assert.equal(browserRejectedLink.warnings.some((warning) => warning.includes("must not fetch")), true);
+assert.equal(fakeBrowserPage.fills.length, 1);
+assert.equal(fakeBrowserPage.clicks.length, 0);
+
+await assert.rejects(() => browserAdapter.resolveSeason({ seed: "browser-smoke-seed" }), /cannot apply seed/);
+const browserResolution = await browserAdapter.resolveSeason();
+assert.equal(browserResolution.resolved, true);
+assert.equal(browserResolution.season, 1);
+assert.equal(fakeBrowserPage.clicks.includes(BROWSER_IOCALC_SELECTORS.resolveSeason), true);
+
+const browserReport = await browserAdapter.getReport();
+assert.equal(browserReport.text.includes("Season 1"), true);
+const browserLog = await browserAdapter.getLog();
+assert.equal(browserLog.entries.some((entry) => entry.includes("fallback false")), true);
+const browserHistory = await browserAdapter.getMatchHistory();
+assert.equal(browserHistory.matches.length, 1);
+const browserState = await browserAdapter.getState();
+assert.equal(browserState.mode, "season_duel");
+assert.equal(browserState.season, 1);
+assert.equal(browserState.raw.walletActionsEnabled, false);
+
+const factoryBrowserPage = createFakeBrowserPage();
+const factoryBrowserAdapter = createIocalcAdapter({
+  transport: "browser",
+  page: factoryBrowserPage,
+  baseUrl: "https://play.iocalc.com/"
+});
+await factoryBrowserAdapter.getCapabilities();
+assert.equal(factoryBrowserPage.gotoCalls[0].url, "https://play.iocalc.com/");
+
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "file:///tmp/iocalc.html" }),
+  /http or https/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "https://example.test/play" }),
+  /localhost/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "https://user:pass@example.test/play" }),
+  /credentials/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "https://example.test/wallet" }),
+  /localhost/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "https://play.iocalc.com/wallet" }),
+  /sandbox play UI/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "http://10.0.0.5:8090/play" }),
+  /localhost/
+);
+assert.throws(
+  () => new BrowserIocalcAdapter({ page: createFakeBrowserPage(), baseUrl: "http://play.iocalc.com/" }),
+  /https/
+);
+
+const queryBrowserPage = createFakeBrowserPage();
+const queryBrowserAdapter = new BrowserIocalcAdapter({
+  page: queryBrowserPage,
+  baseUrl: "https://play.iocalc.com/?next=/wallet#fragment"
+});
+await queryBrowserAdapter.getCapabilities();
+assert.equal(queryBrowserPage.gotoCalls[0].url, "https://play.iocalc.com/");
+
+const redirectBrowserPage = createFakeBrowserPage();
+redirectBrowserPage.goto = function goto(url, options) {
+  this.gotoCalls.push({ url, options });
+  this.currentUrl = "https://play.iocalc.com/wallet";
+};
+const redirectBrowserAdapter = new BrowserIocalcAdapter({
+  page: redirectBrowserPage,
+  baseUrl: "https://play.iocalc.com/"
+});
+await assert.rejects(() => redirectBrowserAdapter.getCapabilities(), /sandbox play UI/);
+
+const queryRedirectBrowserPage = createFakeBrowserPage();
+queryRedirectBrowserPage.goto = function goto(url, options) {
+  this.gotoCalls.push({ url, options });
+  this.currentUrl = "https://play.iocalc.com/?next=/wallet";
+};
+const queryRedirectBrowserAdapter = new BrowserIocalcAdapter({
+  page: queryRedirectBrowserPage,
+  baseUrl: "https://play.iocalc.com/"
+});
+await assert.rejects(() => queryRedirectBrowserAdapter.getCapabilities(), /query or hash/);
+
+const missingSelectorPage = createFakeBrowserPage();
+const originalMissingLocator = missingSelectorPage.locator.bind(missingSelectorPage);
+missingSelectorPage.locator = (selector) => {
+  if (selector === BROWSER_IOCALC_SELECTORS.seasonCommand) {
+    return { count: () => 0 };
+  }
+  return originalMissingLocator(selector);
+};
+const missingSelectorAdapter = new BrowserIocalcAdapter({ page: missingSelectorPage });
+await assert.rejects(() => missingSelectorAdapter.getCapabilities(), /exactly one/);
 
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("setup"), true);
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("signaling game"), true);
