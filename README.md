@@ -47,6 +47,21 @@ const resolution = await adapter.resolveSeason({ seed: "demo-seed" });
 const report = await adapter.getReport();
 ```
 
+HTTP callers can isolate state with a sandbox ID:
+
+```ts
+const adapter = new HttpIocalcAdapter({
+  baseUrl: "http://127.0.0.1:8090",
+  sandboxId: "local-agent-001"
+});
+```
+
+To run the local HTTP conformance example against a running IOCALC game server:
+
+```bash
+IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-check pnpm --filter @iocalc/example-http-player conformance
+```
+
 ## Safety boundary
 
 Allowed:

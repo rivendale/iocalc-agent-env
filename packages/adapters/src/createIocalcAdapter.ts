@@ -5,13 +5,14 @@ import { ManualTranscriptAdapter } from "./ManualTranscriptAdapter.js";
 export interface CreateIocalcAdapterConfig {
   transport: IocalcTransport;
   baseUrl?: string;
+  sandboxId?: string;
 }
 
 export function createIocalcAdapter(config: CreateIocalcAdapterConfig): IocalcPlayerAdapter {
   switch (config.transport) {
     case "http":
       if (!config.baseUrl) throw new Error("baseUrl is required for HTTP adapter.");
-      return new HttpIocalcAdapter(config.baseUrl);
+      return new HttpIocalcAdapter({ baseUrl: config.baseUrl, sandboxId: config.sandboxId });
     case "manual":
       return new ManualTranscriptAdapter();
     case "browser":

@@ -154,6 +154,7 @@ export interface IocalcCapabilities {
 }
 
 export interface IocalcGameState {
+  sandboxId?: string;
   mode: IocalcMode;
   season: number;
   seed?: string;
@@ -171,12 +172,14 @@ export interface SubmitCommandInput {
   mode: IocalcMode;
   command: string;
   agentName?: string;
+  sandboxId?: string;
   seed?: string;
 }
 
 export interface SubmitCommandResult {
   accepted: boolean;
   command: string;
+  sandboxId?: string;
   rejectedReason?: string;
   warnings?: string[];
   boundary?: IocalcBoundaryDecision;
@@ -184,11 +187,13 @@ export interface SubmitCommandResult {
 }
 
 export interface ResolveSeasonInput {
+  sandboxId?: string;
   seed?: string;
 }
 
 export interface SeasonResolution {
   resolved: boolean;
+  sandboxId?: string;
   season: number;
   changes?: Record<string, unknown>;
   score?: number;
@@ -201,6 +206,7 @@ export interface SeasonResolution {
 }
 
 export interface IocalcSeasonReport {
+  sandboxId?: string;
   text: string;
   loopVerifier?: IocalcLoopVerifier;
   gameTheoryPattern?: IocalcGameTheoryPattern;
@@ -210,6 +216,7 @@ export interface IocalcSeasonReport {
 }
 
 export interface IocalcSystemLog {
+  sandboxId?: string;
   entries: string[];
   text?: string;
   boundary?: IocalcBoundaryDecision;
@@ -230,6 +237,7 @@ export interface IocalcMatchHistoryEntry extends Record<string, unknown> {
 }
 
 export interface IocalcMatchHistory {
+  sandboxId?: string;
   matches: Array<Record<string, unknown>>;
   boundary?: IocalcBoundaryDecision;
   audit?: IocalcAuditEvent;
@@ -239,10 +247,12 @@ export interface RunAgentTrialInput {
   agentA: string;
   agentB: string;
   seasons: number;
+  sandboxId?: string;
   seed?: string;
 }
 
 export interface AgentTrialResult {
+  sandboxId?: string;
   winner?: string;
   scorecard: Record<string, unknown>;
   transcript: IocalcTranscript;
