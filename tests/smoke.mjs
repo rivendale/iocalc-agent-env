@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   DEFAULT_SAFE_CAPABILITIES,
+  IOCALC_SAFE_GAME_THEORY_PATTERNS,
   assertSafeCapabilities,
   normalizeGameCommand
 } from "../packages/protocol/dist/index.js";
@@ -31,3 +32,36 @@ const rejected = await adapter.submitCommand({
   command: "   "
 });
 assert.equal(rejected.accepted, false);
+
+assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("setup"), true);
+assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("signaling game"), true);
+
+const sampleReport = {
+  text: "Season report",
+  loopVerifier: {
+    objective: "Improve settlement outcome inside the sandbox.",
+    hypothesis: "Repair plus scout should reduce avoidable pressure.",
+    observedOutcome: "Damage fell and information improved.",
+    verifierNotes: "Report-only verifier note.",
+    nextPolicy: "Prefer scouting before pressure commands."
+  },
+  gameTheoryPattern: {
+    name: "signaling game",
+    summary: "The command improved information before escalation.",
+    payoff: "Better information reduced downside risk."
+  }
+};
+
+assert.equal(sampleReport.loopVerifier.nextPolicy.includes("scouting"), true);
+assert.equal(sampleReport.gameTheoryPattern.name, "signaling game");
+
+const sampleAgentIdentity = {
+  canonicalAgentId: "iocalc-agent-0001",
+  controllerType: "scripted-agent",
+  capabilityScope: ["canReadState", "canSubmitGameCommand"],
+  commandSource: "scripted",
+  reviewNotes: ["Sandbox-only local scripted agent."]
+};
+
+assert.equal(sampleAgentIdentity.capabilityScope.includes("canReadState"), true);
+assert.equal(sampleAgentIdentity.capabilityScope.includes("walletActionsEnabled"), false);
