@@ -36,3 +36,20 @@ Every compatible adapter must expose safe capabilities. These fields must remain
   "productionMutationEnabled": false
 }
 ```
+
+## Boundary and audit metadata
+
+Compatible implementations may return optional `boundary` and `audit` records.
+These records are for observability only:
+
+- `boundary` says whether a sandbox gameplay action was allowed or rejected.
+- `audit` records the inert gameplay event that occurred.
+- Every boundary decision must be `sandboxOnly: true`.
+- Every boundary decision must use the `sandbox-gameplay-only` policy.
+- Every boundary decision must continue blocking wallet actions, feedback trust
+  mutation, external URL fetching, code execution, secrets access, and
+  production mutation.
+
+Boundary and audit records must not grant accounts, sessions, wallet authority,
+deployment authority, private-key access, financial authority, or automatic
+feedback-to-game mutation.
