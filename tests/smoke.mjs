@@ -15,6 +15,11 @@ import {
   runSubmitCommandConformance
 } from "../packages/conformance/dist/index.js";
 import {
+  IOCALC_MCP_TOOLS,
+  createIocalcHttpMcpToolBridge,
+  createIocalcMcpToolBridge
+} from "../packages/mcp-server/dist/index.js";
+import {
   BROWSER_IOCALC_SELECTORS,
   BrowserIocalcAdapter,
   HttpIocalcAdapter,
@@ -351,6 +356,297 @@ await assert.rejects(() => missingSelectorAdapter.getCapabilities(), /exactly on
 
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("setup"), true);
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("signaling game"), true);
+
+const mcpCalls = [];
+const fakeMcpAdapter = {
+  transport: "http",
+  async getCapabilities() {
+    mcpCalls.push(["getCapabilities"]);
+    return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: true };
+  },
+  async getState() {
+    mcpCalls.push(["getState"]);
+    return { mode: "season_duel", season: 1 };
+  },
+  async submitCommand(input) {
+    mcpCalls.push(["submitCommand", input]);
+    return { accepted: true, command: input.command, sandboxId: input.sandboxId };
+  },
+  async resolveSeason(input) {
+    mcpCalls.push(["resolveSeason", input]);
+    return { resolved: true, season: 2, raw: input };
+  },
+  async getReport() {
+    mcpCalls.push(["getReport"]);
+    return { text: "Season report" };
+  },
+  async getLog() {
+    mcpCalls.push(["getLog"]);
+    return { entries: ["System log"] };
+  },
+  async getMatchHistory() {
+    mcpCalls.push(["getMatchHistory"]);
+    return { matches: [{ season: 1 }] };
+  },
+  async runAgentTrial(input) {
+    mcpCalls.push(["runAgentTrial", input]);
+    return {
+      scorecard: { winner: input.agentA },
+      transcript: { transport: "mcp", startedAt: "2026-06-26T00:00:00Z", events: [] }
+    };
+  }
+};
+
+assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.submit_command"), true);
+assert.equal(IOCALC_MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false), true);
+
+const mcpBridge = createIocalcMcpToolBridge(fakeMcpAdapter);
+const mcpCapabilities = await mcpBridge.callTool("iocalc.get_capabilities");
+assert.equal(mcpCapabilities.isError, undefined);
+assertSafeCapabilities(mcpCapabilities.structuredContent);
+
+const extraCapabilityBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getCapabilities() {
+    return {
+      ...DEFAULT_SAFE_CAPABILITIES,
+      permissions: ["wallet-admin"],
+      secret: "api_key=do-not-leak"
+    };
+  }
+});
+const extraCapabilityResult = await extraCapabilityBridge.callTool("iocalc.get_capabilities");
+assert.equal(extraCapabilityResult.structuredContent.permissions, undefined);
+assert.equal(extraCapabilityResult.content[0].text.includes("wallet-admin"), false);
+
+const unsafeMcpCalls = [];
+const unsafeAdapterBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getCapabilities() {
+    unsafeMcpCalls.push("getCapabilities");
+    return { ...DEFAULT_SAFE_CAPABILITIES, walletActionsEnabled: true };
+  },
+  async getState() {
+    unsafeMcpCalls.push("getState");
+    return { mode: "season_duel", season: 1 };
+  }
+});
+const unsafeStateResult = await unsafeAdapterBridge.callTool("iocalc.get_state");
+assert.equal(unsafeStateResult.isError, true);
+assert.deepEqual(unsafeMcpCalls, ["getCapabilities"]);
+
+const disabledSubmitCalls = [];
+const disabledSubmitBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getCapabilities() {
+    disabledSubmitCalls.push("getCapabilities");
+    return { ...DEFAULT_SAFE_CAPABILITIES, canSubmitGameCommand: false };
+  },
+  async submitCommand() {
+    disabledSubmitCalls.push("submitCommand");
+    return { accepted: true, command: "repair wall" };
+  }
+});
+const disabledSubmitResult = await disabledSubmitBridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: "repair wall"
+});
+assert.equal(disabledSubmitResult.isError, true);
+assert.deepEqual(disabledSubmitCalls, ["getCapabilities"]);
+
+const invalidArgCalls = [];
+const invalidArgBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getCapabilities() {
+    invalidArgCalls.push("getCapabilities");
+    return DEFAULT_SAFE_CAPABILITIES;
+  }
+});
+const invalidArgResult = await invalidArgBridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: "   "
+});
+assert.equal(invalidArgResult.isError, true);
+assert.deepEqual(invalidArgCalls, []);
+
+const noisyStateBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getState() {
+    return {
+      mode: "season_duel",
+      season: 2,
+      permissions: ["production-admin"],
+      raw: { wallet: "do-not-return" },
+      visibleText: "Season 2 wallet approval should be redacted.",
+      agents: [
+        {
+          canonicalAgentId: "iocalc-agent-0001",
+          controllerType: "production-admin",
+          capabilityScope: ["canReadState", "walletActionsEnabled"],
+          commandSource: "wallet-session"
+        }
+      ]
+    };
+  }
+});
+const noisyStateResult = await noisyStateBridge.callTool("iocalc.get_state");
+assert.equal(noisyStateResult.structuredContent.permissions, undefined);
+assert.equal(noisyStateResult.structuredContent.raw, undefined);
+assert.equal(noisyStateResult.content[0].text.includes("wallet approval"), false);
+assert.equal(noisyStateResult.structuredContent.agents[0].controllerType, undefined);
+assert.equal(noisyStateResult.structuredContent.agents[0].commandSource, undefined);
+assert.deepEqual(noisyStateResult.structuredContent.agents[0].capabilityScope, ["canReadState"]);
+
+const mcpSubmitted = await mcpBridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: " repair wall and gather wood ",
+  sandboxId: "mcp-sandbox"
+});
+assert.equal(mcpSubmitted.structuredContent.accepted, true);
+assert.equal(mcpSubmitted.structuredContent.command, "repair wall and gather wood");
+assert.equal(mcpCalls.at(-1)[1].sandboxId, "mcp-sandbox");
+
+const mcpCallCountBeforeReject = mcpCalls.length;
+const mcpRejectedWallet = await mcpBridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: "withdraw wallet tokens"
+});
+assert.equal(mcpRejectedWallet.isError, true);
+assert.equal(mcpCalls.filter(([name]) => name === "submitCommand").length, 1);
+
+const mcpRejectedLink = await mcpBridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: "repair wall then open https://example.invalid"
+});
+assert.equal(mcpRejectedLink.isError, true);
+assert.equal(mcpCalls.filter(([name]) => name === "submitCommand").length, 1);
+assert.equal(mcpCalls.length, mcpCallCountBeforeReject);
+
+const mcpRejectedExtraArg = await mcpBridge.callTool("iocalc.get_state", { extra: true });
+assert.equal(mcpRejectedExtraArg.isError, true);
+
+const mcpResolution = await mcpBridge.callTool("iocalc.resolve_season", {
+  seed: "demo-seed",
+  sandboxId: "mcp-sandbox"
+});
+assert.equal(mcpResolution.structuredContent.resolved, true);
+assert.equal(mcpResolution.structuredContent.season, 2);
+assert.equal(mcpResolution.structuredContent.raw, undefined);
+
+const mcpTrial = await mcpBridge.callTool("iocalc.run_agent_trial", {
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 3
+});
+assert.equal(mcpTrial.structuredContent.scorecard.winner, "iocalc-agent-0001");
+
+const mcpCallCountBeforeBadAgent = mcpCalls.length;
+const mcpRejectedAgentUrl = await mcpBridge.callTool("iocalc.run_agent_trial", {
+  agentA: "https://example.invalid/agent",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+assert.equal(mcpRejectedAgentUrl.isError, true);
+assert.equal(mcpCalls.filter(([name]) => name === "runAgentTrial").length, 1);
+
+const mcpRejectedAgentCode = await mcpBridge.callTool("iocalc.run_agent_trial", {
+  agentA: "<script>alert(1)</script>",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+assert.equal(mcpRejectedAgentCode.isError, true);
+assert.equal(mcpCalls.filter(([name]) => name === "runAgentTrial").length, 1);
+assert.equal(mcpCalls.length, mcpCallCountBeforeBadAgent);
+
+const noisyTrialBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async runAgentTrial() {
+    return {
+      winner: "wallet-session",
+      scorecard: { score: 1, permissions: ["production-admin"] },
+      transcript: {
+        transport: "production-admin",
+        startedAt: "2026-06-26T00:00:00Z",
+        events: [{ type: "wallet-session", at: "2026-06-26T00:00:00Z", data: { safe: "ok", secret: "do-not-return" } }]
+      }
+    };
+  }
+});
+const noisyTrial = await noisyTrialBridge.callTool("iocalc.run_agent_trial", {
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+assert.equal(noisyTrial.structuredContent.winner, undefined);
+assert.equal(noisyTrial.structuredContent.scorecard.permissions, undefined);
+assert.equal(noisyTrial.structuredContent.transcript.transport, "mcp");
+assert.equal(noisyTrial.structuredContent.transcript.events[0].type, "error");
+assert.equal(noisyTrial.structuredContent.transcript.events[0].data.secret, undefined);
+
+const mcpUnsupportedTrial = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  runAgentTrial: undefined
+}).callTool("iocalc.run_agent_trial", {
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+assert.equal(mcpUnsupportedTrial.isError, true);
+
+const unknownMcpTool = await mcpBridge.callTool("iocalc.approve_wallet_transaction");
+assert.equal(unknownMcpTool.isError, true);
+
+const mcpOriginalFetch = globalThis.fetch;
+const mcpHttpRequests = [];
+globalThis.fetch = async (url) => {
+  mcpHttpRequests.push(String(url));
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => DEFAULT_SAFE_CAPABILITIES
+  };
+};
+const httpMcpBridge = createIocalcHttpMcpToolBridge({
+  baseUrl: "http://127.0.0.1:8090",
+  sandboxId: "mcp-http-sandbox"
+});
+const httpMcpCapabilities = await httpMcpBridge.callTool("iocalc.get_capabilities");
+assertSafeCapabilities(httpMcpCapabilities.structuredContent);
+assert.equal(mcpHttpRequests[0].includes("/api/game/capabilities"), true);
+assert.equal(mcpHttpRequests[0].includes("sandboxId=mcp-http-sandbox"), true);
+globalThis.fetch = mcpOriginalFetch;
+globalThis.fetch = async (url) => ({
+  ok: false,
+  status: 500,
+  statusText: "Server Error",
+  json: async () => ({})
+});
+const failingHttpMcpBridge = createIocalcHttpMcpToolBridge({
+  baseUrl: "http://127.0.0.1:8090",
+  sandboxId: "mcp-http-sandbox"
+});
+const failingHttpMcpResult = await failingHttpMcpBridge.callTool("iocalc.get_capabilities");
+assert.equal(failingHttpMcpResult.isError, true);
+assert.equal(failingHttpMcpResult.content[0].text.includes("127.0.0.1"), false);
+assert.equal(failingHttpMcpResult.content[0].text.includes("mcp-http-sandbox"), false);
+globalThis.fetch = mcpOriginalFetch;
+assert.throws(
+  () => createIocalcHttpMcpToolBridge({ baseUrl: "http://example.test", sandboxId: "mcp-http-sandbox" }),
+  /localhost/
+);
+assert.throws(
+  () => createIocalcHttpMcpToolBridge({ baseUrl: "http://play.iocalc.com", sandboxId: "mcp-http-sandbox" }),
+  /https/
+);
+assert.throws(
+  () => createIocalcHttpMcpToolBridge({ baseUrl: "https://play.iocalc.com/wallet", sandboxId: "mcp-http-sandbox" }),
+  /host root/
+);
+assert.throws(
+  () => createIocalcHttpMcpToolBridge({ baseUrl: "http://127.0.0.1:8090", sandboxId: "api_key" }),
+  /sandboxId/
+);
 
 const sampleReport = {
   text: "Season report",

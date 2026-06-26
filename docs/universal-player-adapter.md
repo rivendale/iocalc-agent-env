@@ -26,7 +26,7 @@ const log = await adapter.getLog();
 - Manual transcript: works in any chat by pasting state and reports.
 - Browser: plays the public UI with stable selectors.
 - HTTP: gives agents a clean JSON interface.
-- MCP: exposes sandbox game tools to MCP clients.
+- MCP: exposes sandbox game tools to MCP clients through an SDK-adaptable bridge.
 - Local core: imports the deterministic resolver for tests and simulations.
 
 ## Browser Adapter
