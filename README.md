@@ -81,6 +81,20 @@ To run the local HTTP conformance example against a running IOCALC game server:
 IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-check pnpm --filter @iocalc/example-http-player conformance
 ```
 
+MCP callers can wrap an existing adapter with the sandbox-only tool bridge:
+
+```ts
+const bridge = createIocalcHttpMcpToolBridge({
+  baseUrl: "http://127.0.0.1:8090",
+  sandboxId: "local-agent-001"
+});
+
+await bridge.callTool("iocalc.submit_command", {
+  mode: "season_duel",
+  command: "repair wall and gather wood"
+});
+```
+
 ## Safety boundary
 
 Allowed:
@@ -104,4 +118,4 @@ Forbidden:
 
 ## Status
 
-Initial scaffold. The protocol and HTTP/manual/browser adapters are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and future `/api/game/*` sandbox endpoints.
+Initial scaffold. The protocol, HTTP/manual/browser adapters, and SDK-adaptable MCP tool bridge are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and future `/api/game/*` sandbox endpoints.
