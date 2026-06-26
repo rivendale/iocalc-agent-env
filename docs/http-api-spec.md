@@ -15,10 +15,23 @@ GET  /api/game/match-history
 POST /api/game/agent-trial
 ```
 
+## Sandbox isolation
+
+Implementations may isolate in-memory sandbox state with `sandboxId`. Clients may
+send it in:
+
+- JSON bodies for POST requests
+- query strings for GET or POST requests
+- `X-IOCALC-Sandbox` headers
+
+`sandboxId` is not an account, session, secret, wallet identity, or authority
+grant. It is only a sandbox partition key for gameplay state.
+
 ## Command request
 
 ```json
 {
+  "sandboxId": "demo-agent-sandbox",
   "mode": "season_duel",
   "agentName": "Example Agent",
   "command": "repair wall and gather wood",

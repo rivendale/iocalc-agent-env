@@ -23,6 +23,9 @@ importers:
       '@iocalc/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
+      '@iocalc/conformance':
+        specifier: workspace:*
+        version: link:../../packages/conformance
 
   packages/adapters:
     dependencies:

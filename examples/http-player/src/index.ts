@@ -1,7 +1,8 @@
 import { HttpIocalcAdapter } from "@iocalc/adapters";
 
 const baseUrl = process.env.IOCALC_BASE_URL ?? "http://localhost:3000";
-const adapter = new HttpIocalcAdapter(baseUrl);
+const sandboxId = process.env.IOCALC_SANDBOX_ID ?? "example-http-player";
+const adapter = new HttpIocalcAdapter({ baseUrl, sandboxId });
 
 const capabilities = await adapter.getCapabilities();
 console.log("capabilities", capabilities);

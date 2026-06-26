@@ -14,7 +14,7 @@ import {
   runResolveSeasonConformance,
   runSubmitCommandConformance
 } from "../packages/conformance/dist/index.js";
-import { ManualTranscriptAdapter } from "../packages/adapters/dist/index.js";
+import { HttpIocalcAdapter, ManualTranscriptAdapter, createIocalcAdapter } from "../packages/adapters/dist/index.js";
 
 assertSafeCapabilities(DEFAULT_SAFE_CAPABILITIES);
 
@@ -41,6 +41,119 @@ const rejected = await adapter.submitCommand({
   command: "   "
 });
 assert.equal(rejected.accepted, false);
+
+const capturedRequests = [];
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (url, init = {}) => {
+  capturedRequests.push({
+    url: String(url),
+    headers: init.headers ?? {},
+    body: init.body ? JSON.parse(String(init.body)) : undefined
+  });
+  const pathname = new URL(String(url)).pathname;
+  const sandboxId = new URL(String(url)).searchParams.get("sandboxId") ?? "missing-sandbox";
+  const payload = pathname.endsWith("/capabilities")
+    ? DEFAULT_SAFE_CAPABILITIES
+    : pathname.endsWith("/state")
+      ? { sandboxId, mode: "season_duel", season: 0 }
+      : pathname.endsWith("/command")
+        ? { accepted: true, sandboxId, command: "repair wall and gather wood", warnings: [] }
+        : pathname.endsWith("/resolve")
+          ? { resolved: true, sandboxId, season: 1 }
+          : pathname.endsWith("/report")
+            ? { sandboxId, text: "report" }
+            : pathname.endsWith("/log")
+              ? { sandboxId, entries: [] }
+              : pathname.endsWith("/match-history")
+                ? { sandboxId, matches: [] }
+                : { sandboxId, scorecard: {}, transcript: { transport: "http", startedAt: "2026-06-26T00:00:00Z", events: [] } };
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => payload
+  };
+};
+
+const httpAdapter = new HttpIocalcAdapter({
+  baseUrl: "http://example.test",
+  sandboxId: "smoke-sandbox"
+});
+await httpAdapter.getState();
+await httpAdapter.submitCommand({
+  mode: "season_duel",
+  command: "repair wall and gather wood",
+  sandboxId: "override-sandbox"
+});
+await httpAdapter.resolveSeason({ seed: "smoke-seed" });
+await httpAdapter.runAgentTrial({
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+
+assert.equal(capturedRequests[0].url.includes("sandboxId=smoke-sandbox"), true);
+assert.equal(capturedRequests[1].url.includes("sandboxId=override-sandbox"), true);
+assert.equal(capturedRequests[1].body.sandboxId, "override-sandbox");
+assert.equal(capturedRequests[2].body.sandboxId, "smoke-sandbox");
+assert.equal(capturedRequests[3].body.sandboxId, "smoke-sandbox");
+for (const invalidSandboxId of [
+  "",
+  "api_key",
+  "api_key_abc",
+  "private_key_1",
+  "password1",
+  "bearer-token-prod",
+  "mnemonic_backup",
+  "access_token_prod",
+  "auth-token-prod",
+  "refresh_token",
+  "oauth_token",
+  "local-token",
+  ".",
+  "..",
+  "-",
+  "_",
+  "-._",
+  ".team",
+  "team.",
+  "_team_",
+  "-team-",
+  "-._team_.-",
+  null,
+  123
+]) {
+  assert.throws(
+    () => new HttpIocalcAdapter({ baseUrl: "http://example.test", sandboxId: invalidSandboxId }),
+    /sandboxId/,
+    `expected invalid constructor sandboxId to throw: ${String(invalidSandboxId)}`
+  );
+}
+assert.throws(
+  () => httpAdapter.submitCommand({
+    mode: "season_duel",
+    command: "repair wall",
+    sandboxId: ""
+  }),
+  /sandboxId/
+);
+assert.throws(
+  () => httpAdapter.submitCommand({
+    mode: "season_duel",
+    command: "repair wall",
+    sandboxId: null
+  }),
+  /sandboxId/
+);
+const factoryAdapter = createIocalcAdapter({
+  transport: "http",
+  baseUrl: "http://example.test",
+  sandboxId: "factory-sandbox"
+});
+await factoryAdapter.getCapabilities();
+assert.equal(capturedRequests.at(-1).url.includes("sandboxId=factory-sandbox"), true);
+
+globalThis.fetch = originalFetch;
 
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("setup"), true);
 assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("signaling game"), true);

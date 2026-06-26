@@ -28,3 +28,15 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 - Agent identity records can describe canonical IDs, controller types,
   sandbox-only capability scope, timeout/fallback events, and review notes
   without granting account, wallet, production, or third-party authority.
+
+## HTTP example runner
+
+With an IOCALC game server running locally, the HTTP example can run the shared
+adapter conformance checks against `/api/game/*`:
+
+```bash
+IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-check pnpm --filter @iocalc/example-http-player conformance
+```
+
+The sandbox ID is only a gameplay partition key. It must not be treated as an
+account, session, wallet identity, or authorization token.
