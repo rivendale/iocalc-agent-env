@@ -58,7 +58,8 @@ Recommended safe sequence:
 
 ## Stable browser selectors
 
-Add these selectors to the play UI so browser agents and Playwright tests can operate the same public surface as a human:
+Add or preserve these selectors in the play UI so browser agents and Playwright
+tests can operate the same public surface as a human:
 
 ```text
 data-testid="season-command"
@@ -68,6 +69,12 @@ data-testid="system-log"
 data-testid="match-history"
 data-testid="agent-trials-panel"
 ```
+
+The `BrowserIocalcAdapter` in `@iocalc/adapters` reads and clicks only these
+selectors. It is not a general browser agent and must not be extended to Wallet
+Lab, feedback trust, arbitrary URL fetching, or page-side code execution. If it
+owns navigation, it only accepts local development play URLs or `play.iocalc.com`
+HTTPS play URLs and verifies the final URL after navigation.
 
 ## Non-goals
 

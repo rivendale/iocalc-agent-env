@@ -1,7 +1,7 @@
 import { DEFAULT_SAFE_CAPABILITIES, type IocalcPlayerAdapter } from "@iocalc/protocol";
 
 class DeferredAdapter implements IocalcPlayerAdapter {
-  constructor(public readonly transport: "browser" | "mcp" | "local-core") {}
+  constructor(public readonly transport: "mcp" | "local-core") {}
 
   async getCapabilities() {
     return {
@@ -33,12 +33,6 @@ class DeferredAdapter implements IocalcPlayerAdapter {
 
   async getMatchHistory() {
     return { matches: [] };
-  }
-}
-
-export class PlaywrightIocalcAdapter extends DeferredAdapter {
-  constructor() {
-    super("browser");
   }
 }
 
