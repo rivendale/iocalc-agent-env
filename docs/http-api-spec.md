@@ -26,6 +26,79 @@ POST /api/game/agent-trial
 }
 ```
 
+## Optional report metadata
+
+`GET /api/game/report` may include optional agent-readable metadata:
+
+```json
+{
+  "text": "Season report...",
+  "loopVerifier": {
+    "objective": "Keep the settlement solvent while reducing pressure.",
+    "hypothesis": "Repair plus scout reduces risk next season.",
+    "observedOutcome": "Wall damage fell and pressure stayed stable.",
+    "verifierNotes": "Outcome matched the hypothesis in sandbox state.",
+    "nextPolicy": "Repeat repair only if damage remains high."
+  },
+  "gameTheoryPattern": {
+    "name": "signaling game",
+    "summary": "Scouting improved information before escalation.",
+    "payoff": "The safer payoff came from information before pressure."
+  }
+}
+```
+
+`POST /api/game/resolve` may include the same metadata on a resolution-shaped
+payload:
+
+```json
+{
+  "resolved": true,
+  "season": 4,
+  "score": 128,
+  "visibleText": "Season resolved...",
+  "loopVerifier": {
+    "objective": "Keep the settlement solvent while reducing pressure.",
+    "hypothesis": "Repair plus scout reduces risk next season.",
+    "observedOutcome": "Wall damage fell and pressure stayed stable.",
+    "verifierNotes": "Outcome matched the hypothesis in sandbox state.",
+    "nextPolicy": "Repeat repair only if damage remains high."
+  },
+  "gameTheoryPattern": {
+    "name": "signaling game",
+    "summary": "Scouting improved information before escalation.",
+    "payoff": "The safer payoff came from information before pressure."
+  }
+}
+```
+
+These fields are explanatory sandbox records only. They must not execute text,
+fetch links, call external models, modify game rules, mutate feedback trust,
+touch Wallet Lab, or trigger production actions.
+
+## Optional agent identity metadata
+
+`GET /api/game/state` may include scoped agent identities:
+
+```json
+{
+  "mode": "agent_trials",
+  "season": 4,
+  "agents": [
+    {
+      "canonicalAgentId": "iocalc-agent-0001",
+      "controllerType": "scripted-agent",
+      "capabilityScope": ["canReadState", "canSubmitGameCommand"],
+      "commandSource": "scripted",
+      "reviewNotes": ["Sandbox-only local scripted agent."]
+    }
+  ]
+}
+```
+
+Agent identity records are audit metadata only. They do not create accounts,
+grant wallet authority, imply third-party affiliation, or bypass human review.
+
 ## Requirements
 
 - Commands are untrusted game text.
