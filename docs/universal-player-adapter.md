@@ -56,6 +56,11 @@ Command text is still untrusted gameplay input.
 The browser adapter cannot apply `seed` or `sandboxId` through the UI. Use the
 HTTP or local-core adapter for seeded sandbox resolution.
 
+Browser integrations can run `runBrowserPlayConformance(adapter)` from
+`@iocalc/conformance` after opening a Playwright-compatible page. The helper
+checks the fixed-selector loop and resolves without a seed so it does not ask
+the browser UI to provide HTTP-only sandbox controls.
+
 ## Design rule
 
 The adapter never owns wallet, feedback trust, deployment, secret, or production authority. It only normalizes safe gameplay.

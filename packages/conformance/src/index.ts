@@ -19,6 +19,12 @@ export interface ConformanceResult {
   message?: string;
 }
 
+type ConformanceErrorScope = "default" | "browser";
+
+export interface BrowserPlayConformanceOptions {
+  command?: string;
+}
+
 type ResponseContractRoute = "GET /api/game/state" | "POST /api/game/resolve" | "GET /api/game/report";
 type ResponseContractPayloads = Partial<Record<ResponseContractRoute, unknown>>;
 
@@ -88,6 +94,13 @@ function readOwnDataProperty(payload: object, key: string): { present: boolean; 
     return { present: true, unsafe: true };
   }
   return { present: true, unsafe: false, value: descriptor.value };
+}
+
+function conformanceErrorMessage(error: unknown, scope: ConformanceErrorScope = "default"): string {
+  if (scope === "browser") {
+    return "Browser conformance operation failed.";
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function runSafetyConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
@@ -424,6 +437,195 @@ export async function runAgentTrialConformance(
   }
 }
 
+export async function runBrowserPlayConformance(
+  adapter: IocalcPlayerAdapter,
+  options: BrowserPlayConformanceOptions = {}
+): Promise<ConformanceResult[]> {
+  const command = options.command ?? "repair wall and gather wood";
+  const results: ConformanceResult[] = [];
+
+  if (adapter.transport !== "browser") {
+    return [
+      {
+        name: "browser-transport",
+        passed: false,
+        message: "Browser play conformance requires a browser transport adapter."
+      }
+    ];
+  }
+
+  try {
+    const capabilities = await adapter.getCapabilities();
+    assertSafeCapabilities(capabilities);
+    results.push({
+      name: "browser-safe-capabilities",
+      passed: capabilities.canRunAgentTrial === false,
+      message: capabilities.canRunAgentTrial ? "Browser adapter must not expose agent trial execution through the UI." : undefined
+    });
+    results.push(...boundaryResults("browser-capabilities", capabilities));
+  } catch (error) {
+    results.push({
+      name: "browser-safe-capabilities",
+      passed: false,
+      message: conformanceErrorMessage(error, "browser")
+    });
+  }
+
+  try {
+    const state = await adapter.getState();
+    results.push({
+      name: "browser-read-state",
+      passed: state.mode === "season_duel" && Number.isFinite(state.season),
+      message: state.mode === "season_duel" ? undefined : "Browser state did not expose Season Duel mode."
+    });
+    results.push(...boundaryResults("browser-state", state));
+    const walletOutOfScope = browserPayloadKeepsWalletOutOfScope(state);
+    results.push({
+      name: "browser-wallet-out-of-scope",
+      passed: walletOutOfScope,
+      message: walletOutOfScope ? undefined : "Browser adapter must not expose Wallet Lab or wallet actions through gameplay selectors."
+    });
+  } catch (error) {
+    results.push({
+      name: "browser-read-state",
+      passed: false,
+      message: conformanceErrorMessage(error, "browser")
+    });
+  }
+
+  try {
+    const submitted = await adapter.submitCommand({ mode: "season_duel", command });
+    results.push({
+      name: "browser-submit-command",
+      passed: submitted.accepted === true && submitted.command === command,
+      message: submitted.accepted ? undefined : "Browser command was rejected."
+    });
+    results.push(...boundaryResults("browser-submit-command", submitted));
+  } catch (error) {
+    results.push({
+      name: "browser-submit-command",
+      passed: false,
+      message: conformanceErrorMessage(error, "browser")
+    });
+  }
+
+  try {
+    const resolved = await adapter.resolveSeason({});
+    results.push({
+      name: "browser-resolve-season",
+      passed: resolved.resolved === true,
+      message: resolved.resolved ? undefined : "Browser season did not resolve."
+    });
+    results.push(...boundaryResults("browser-resolve-season", resolved));
+  } catch (error) {
+    results.push({
+      name: "browser-resolve-season",
+      passed: false,
+      message: conformanceErrorMessage(error, "browser")
+    });
+  }
+
+  try {
+    const report = await adapter.getReport();
+    results.push({
+      name: "browser-read-report",
+      passed: typeof report.text === "string" && report.text.length > 0,
+      message: report.text ? undefined : "Browser report text was empty."
+    });
+    results.push(...boundaryResults("browser-report", report));
+  } catch (error) {
+    results.push({ name: "browser-read-report", passed: false, message: conformanceErrorMessage(error, "browser") });
+  }
+
+  try {
+    const log = await adapter.getLog();
+    results.push({
+      name: "browser-read-log",
+      passed: Array.isArray(log.entries),
+      message: Array.isArray(log.entries) ? undefined : "Browser log entries were not an array."
+    });
+    results.push(...boundaryResults("browser-log", log));
+  } catch (error) {
+    results.push({ name: "browser-read-log", passed: false, message: conformanceErrorMessage(error, "browser") });
+  }
+
+  try {
+    const history = await adapter.getMatchHistory();
+    results.push({
+      name: "browser-read-match-history",
+      passed: Array.isArray(history.matches),
+      message: Array.isArray(history.matches) ? undefined : "Browser match history was not an array."
+    });
+    results.push(...boundaryResults("browser-match-history", history));
+  } catch (error) {
+    results.push({
+      name: "browser-read-match-history",
+      passed: false,
+      message: conformanceErrorMessage(error, "browser")
+    });
+  }
+
+  return results;
+}
+
+function browserPayloadKeepsWalletOutOfScope(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const raw = readOwnDataProperty(payload, "raw");
+  if (!raw.present || raw.unsafe) return false;
+  const rawValue = raw.value;
+  if (!rawValue || typeof rawValue !== "object") return false;
+
+  for (const forbiddenFlag of [
+    "walletActionsEnabled",
+    "feedbackCanMutateGameplay",
+    "externalUrlFetchEnabled",
+    "codeExecutionEnabled",
+    "secretsAccessEnabled",
+    "productionMutationEnabled"
+  ]) {
+    const flag = readOwnDataProperty(rawValue, forbiddenFlag);
+    if (!flag.present || flag.unsafe || flag.value !== false) {
+      return false;
+    }
+  }
+
+  const selectors = readOwnDataProperty(rawValue, "selectors");
+  if (!selectors.present || selectors.unsafe) return false;
+  if (!selectors.value || typeof selectors.value !== "object") return false;
+  let selectorCount = 0;
+  for (const selectorKey of Reflect.ownKeys(selectors.value)) {
+    if (typeof selectorKey !== "string") return false;
+    if (/wallet|feedback|recommend|api\/game|http|javascript/i.test(selectorKey)) return false;
+    const selector = readOwnDataProperty(selectors.value, selectorKey);
+    if (selector.unsafe || typeof selector.value !== "string" || /wallet|feedback|recommend|api\/game|http|javascript/i.test(selector.value)) {
+      return false;
+    }
+    selectorCount += 1;
+  }
+  return selectorCount > 0;
+}
+
+function aggregateResolveInput(adapter: IocalcPlayerAdapter): ResolveSeasonInput | undefined {
+  return adapter.transport === "browser" ? {} : undefined;
+}
+
+function aggregateSubmitInput(adapter: IocalcPlayerAdapter): SubmitCommandInput | undefined {
+  if (adapter.transport === "browser") {
+    return {
+      mode: "season_duel",
+      command: "repair wall and gather wood"
+    };
+  }
+  return undefined;
+}
+
+async function aggregateAgentTrialConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
+  if (adapter.transport === "browser") {
+    return [];
+  }
+  return runAgentTrialConformance(adapter);
+}
+
 export async function runAdapterConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
   const observedPayloads: ResponseContractPayloads = {};
   return [
@@ -431,9 +633,9 @@ export async function runAdapterConformance(adapter: IocalcPlayerAdapter): Promi
     ...(await runSafetyConformance(adapter)),
     ...runCommandValidationConformance(),
     ...(await runReadConformance(adapter, observedPayloads)),
-    ...(await runSubmitCommandConformance(adapter)),
-    ...(await runResolveSeasonConformance(adapter, undefined, observedPayloads)),
-    ...(await runAgentTrialConformance(adapter)),
+    ...(await runSubmitCommandConformance(adapter, aggregateSubmitInput(adapter))),
+    ...(await runResolveSeasonConformance(adapter, aggregateResolveInput(adapter), observedPayloads)),
+    ...(await aggregateAgentTrialConformance(adapter)),
     ...(await runResponseContractConformance(adapter, { observedPayloads, skipUnobserved: true }))
   ];
 }
