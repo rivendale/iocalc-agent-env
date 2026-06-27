@@ -7,6 +7,7 @@ import {
   type AgentTrialResult,
   type IocalcCapabilities,
   type IocalcGameApiManifest,
+  type IocalcGameApiManifestResponseSpec,
   type IocalcGameApiManifestRoute,
   type IocalcGameState,
   type IocalcMatchHistory,
@@ -216,23 +217,30 @@ const FORBIDDEN_MCP_TEXT =
   /\b(?:accounts?|api[_ -]?key|auth|bearer|broker|coinbase|contracts?|cookies?|crypto|deploy|deployment|eval|execute|financial|login|mnemonic|oauth|password|private[_ -]?key|production|secrets?|seed phrase|sessions?|shell|sudo|tokens?|transactions?|transfers?|wallets?|withdraw(?:al)?)\b/i;
 const FORBIDDEN_MCP_TEXT_GLOBAL = new RegExp(FORBIDDEN_MCP_TEXT.source, "gi");
 const SENSITIVE_RESULT_KEY =
-  /(?:account|api.*key|auth|bearer|cookie|credential|deploy|financial|key|mnemonic|oauth|password|permission|private|production|secret|session|token|transaction|wallet|withdraw)/i;
+  /(?:account|api.*key|auth|bearer|cookie|credential|deploy|feedback|fetch|financial|key|login|mnemonic|oauth|password|permission|private|production|secret|session|token|transaction|trust|url|wallet|withdraw)/i;
 const UNSAFE_MANIFEST_COMPACT_TERMS = [
   "apikey",
+  "auth",
   "privatekey",
   "seedphrase",
   "mnemonic",
   "password",
   "bearer",
+  "cookie",
   "accesstoken",
   "authtoken",
   "oauthtoken",
   "refreshtoken",
+  "login",
   "token",
   "secret",
   "credential",
   "wallet",
   "transaction",
+  "url",
+  "fetch",
+  "feedback",
+  "trust",
   "payment",
   "payout",
   "withdraw",
@@ -255,6 +263,8 @@ const SECRET_SANDBOX_PATTERN =
   /(?:api[._-]*key|private[._-]*key|seed[._-]*phrase|mnemonic|password|(?:access|auth|bearer|oauth|refresh)[._-]*token|token|secret|credential|passwd)/i;
 const COMMAND_REQUEST_FIELD_KEYS = ["sandboxId", "mode", "agentName", "command", "seed"];
 const AGENT_TRIAL_REQUEST_FIELD_KEYS = ["sandboxId", "agentA", "agentB", "seasons", "seed"];
+const PROTOTYPE_RESULT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const SAFE_RESPONSE_FIELD_PATH = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/;
 
 export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcMcpToolBridge {
   return {
@@ -425,6 +435,7 @@ function sanitizeGameApiManifest(manifest: IocalcGameApiManifest): IocalcGameApi
       sandboxTtlSeconds: sanitizeOptionalNumber(manifest.protocol.sandboxTtlSeconds)
     }),
     routes: manifest.routes.map(sanitizeManifestRoute).filter((route): route is IocalcGameApiManifestRoute => Boolean(route)),
+    responses: cloneManifestResponses(manifest.responses),
     commandRequest: cloneManifestRequestRecord(manifest.commandRequest, COMMAND_REQUEST_FIELD_KEYS),
     agentTrialRequest: cloneManifestRequestRecord(manifest.agentTrialRequest, AGENT_TRIAL_REQUEST_FIELD_KEYS),
     selectors: manifest.selectors
@@ -446,6 +457,42 @@ function sanitizeGameApiManifest(manifest: IocalcGameApiManifest): IocalcGameApi
     },
     outOfScope: manifest.outOfScope?.map((item) => sanitizeManifestText(item, 120)).filter((item): item is string => Boolean(item))
   }) as unknown as IocalcGameApiManifest;
+}
+
+function cloneManifestResponses(
+  responses: IocalcGameApiManifest["responses"] | undefined
+): IocalcGameApiManifest["responses"] | undefined {
+  if (!responses) return undefined;
+  const output: Record<string, IocalcGameApiManifestResponseSpec> = {};
+  for (const routeKey of Reflect.ownKeys(responses)) {
+    if (typeof routeKey !== "string" || !SAFE_MANIFEST_ROUTES.has(routeKey)) continue;
+    const spec = responses[routeKey];
+    if (!spec || typeof spec !== "object") continue;
+    const fields = sanitizeManifestResponseFields(spec.fields);
+    if (fields.length === 0) continue;
+    const cloned: IocalcGameApiManifestResponseSpec = { fields };
+    const description = sanitizeManifestText(spec.description, 240);
+    if (description) cloned.description = description;
+    const optionalFields = sanitizeManifestResponseFields(spec.optionalFields);
+    if (optionalFields && optionalFields.length > 0) cloned.optionalFields = optionalFields;
+    output[routeKey] = cloned;
+  }
+  return Object.keys(output).length > 0 ? output : undefined;
+}
+
+function sanitizeManifestResponseFields(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const field of value.slice(0, 80)) {
+    if (typeof field !== "string" || field.length < 1 || field.length > 80) continue;
+    if (!SAFE_RESPONSE_FIELD_PATH.test(field) || hasUnsafeManifestText(field)) continue;
+    if (field.split(".").some((segment) => PROTOTYPE_RESULT_KEYS.has(segment))) continue;
+    if (seen.has(field)) continue;
+    seen.add(field);
+    output.push(field);
+  }
+  return output;
 }
 
 function cloneManifestRequestRecord(
@@ -517,6 +564,9 @@ function sanitizeGameState(state: IocalcGameState): IocalcGameState {
         reviewNotes: agent.reviewNotes?.map((note) => sanitizeShortText(note)).filter((note): note is string => Boolean(note))
       })
     ),
+    settings: sanitizeRecord(state.settings),
+    settingsSummary: sanitizeShortText(state.settingsSummary),
+    settingEffects: sanitizeRecord(state.settingEffects),
     settlement: sanitizeRecord(state.settlement),
     resources: sanitizeNumberRecord(state.resources),
     risk: sanitizeNumberRecord(state.risk),
@@ -541,6 +591,9 @@ function sanitizeSeasonResolution(result: SeasonResolution): SeasonResolution {
     season: sanitizeNumber(result.season, 0),
     score: sanitizeOptionalNumber(result.score),
     changes: sanitizeRecord(result.changes),
+    settings: sanitizeRecord(result.settings),
+    settingsSummary: sanitizeShortText(result.settingsSummary),
+    settingEffects: sanitizeRecord(result.settingEffects),
     visibleText: sanitizeVisibleText(result.visibleText)
   }) as unknown as SeasonResolution;
 }
@@ -549,6 +602,9 @@ function sanitizeSeasonReport(report: IocalcSeasonReport): IocalcSeasonReport {
   return dropUndefined({
     sandboxId: sanitizeOptionalSandboxValue(report.sandboxId),
     text: sanitizeVisibleText(report.text) ?? "",
+    settings: sanitizeRecord(report.settings),
+    settingsSummary: sanitizeShortText(report.settingsSummary),
+    settingEffects: sanitizeRecord(report.settingEffects),
     structured: sanitizeRecord(report.structured)
   }) as unknown as IocalcSeasonReport;
 }
@@ -711,7 +767,8 @@ function sanitizeRecord(value: unknown, depth = 0): Record<string, unknown> | un
 
 function sanitizeRecordKey(key: string): string | undefined {
   if (!/^[A-Za-z0-9_.-]{1,80}$/.test(key)) return undefined;
-  if (SENSITIVE_RESULT_KEY.test(key)) return undefined;
+  if (PROTOTYPE_RESULT_KEYS.has(key)) return undefined;
+  if (SENSITIVE_RESULT_KEY.test(key) || hasUnsafeManifestText(key)) return undefined;
   return key;
 }
 

@@ -52,6 +52,11 @@ const report = await adapter.getReport();
 the HTTP manifest directly. HTTP adapters use `GET /api/game/manifest` and do
 not send sandbox IDs for that static contract read.
 
+HTTP manifests may include an optional `responses` map keyed by known API route,
+with safe dot-path field names such as `settingsSummary` or
+`changes.passiveSettings`. Response contracts are documentation for sandbox game
+payloads only; they do not grant authority or permit live-world effects.
+
 HTTP callers can isolate state with a sandbox ID:
 
 ```ts

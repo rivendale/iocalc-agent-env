@@ -71,20 +71,27 @@ const UNSAFE_MANIFEST_TEXT =
   /\b(?:api[_ -]?keys?|private[_ -]?keys?|seed phrases?|mnemonics?|passwords?|bearer|access[_ -]?tokens?|auth[_ -]?tokens?|oauth|refresh[_ -]?tokens?|tokens?|secrets?|credentials?|wallets?|transactions?|payments?|payouts?|withdraw(?:al|als|s|ing)?|accounts?|sessions?|production|deploy(?:ment|ments|s|ed|ing)?|financial|shell|execute|execution|eval|code)\b/i;
 const UNSAFE_MANIFEST_COMPACT_TERMS = [
   "apikey",
+  "auth",
   "privatekey",
   "seedphrase",
   "mnemonic",
   "password",
   "bearer",
+  "cookie",
   "accesstoken",
   "authtoken",
   "oauthtoken",
   "refreshtoken",
+  "login",
   "token",
   "secret",
   "credential",
   "wallet",
   "transaction",
+  "url",
+  "fetch",
+  "feedback",
+  "trust",
   "payment",
   "payout",
   "withdraw",
@@ -120,6 +127,7 @@ const MANIFEST_KEYS = new Set([
   "version",
   "protocol",
   "routes",
+  "responses",
   "commandRequest",
   "agentTrialRequest",
   "selectors",
@@ -141,6 +149,7 @@ const MANIFEST_PROTOCOL_KEYS = new Set([
   "sandboxTtlSeconds"
 ]);
 const MANIFEST_ROUTE_KEYS = new Set(["method", "path", "purpose", "body", "query", "contentType", "maxBytes", "sideEffects"]);
+const MANIFEST_RESPONSE_KEYS = new Set(["description", "fields", "optionalFields"]);
 const MANIFEST_INPUT_POLICY_KEYS = new Set([
   "asciiOnly",
   "noLinks",
@@ -165,6 +174,8 @@ const COMMAND_REQUEST_KEYS = new Set(["contentType", "fields", "allowedCommandVo
 const COMMAND_REQUEST_FIELD_KEYS = new Set(["sandboxId", "mode", "agentName", "command", "seed"]);
 const AGENT_TRIAL_REQUEST_KEYS = new Set(["contentType", "fields"]);
 const AGENT_TRIAL_REQUEST_FIELD_KEYS = new Set(["sandboxId", "agentA", "agentB", "seasons", "seed"]);
+const SAFE_RESPONSE_FIELD_PATH = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/;
+const PROTOTYPE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
 
 const FORBIDDEN_CAPABILITIES = [
   "walletActionsEnabled",
@@ -317,6 +328,9 @@ export function assertSandboxGameApiManifest(manifest: IocalcGameApiManifest): v
       throw new Error(`Unsafe game API manifest: route ${route.path} has unsafe maxBytes`);
     }
   }
+  if (manifest.responses !== undefined) {
+    assertSafeManifestResponses(manifest.responses, routes);
+  }
   if (!Array.isArray(manifest.safeCapabilities)) {
     throw new Error("Unsafe game API manifest: safeCapabilities must be an array");
   }
@@ -432,6 +446,59 @@ function assertSafeManifestSelectors(value: unknown): void {
   }
 }
 
+function assertSafeManifestResponses(value: unknown, routes: Set<string>): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Unsafe game API manifest: responses must be an object");
+  }
+  const allowedResponseKeys = new Set(Array.from(routes).filter((route) => ALLOWED_MANIFEST_ROUTES.has(route)));
+  assertKnownObjectKeys(value, allowedResponseKeys, "responses");
+  for (const routeKey of Reflect.ownKeys(value)) {
+    if (typeof routeKey !== "string") {
+      throw new Error("Unsafe game API manifest: responses contains unsupported key");
+    }
+    const route = routeKey;
+    const spec = (value as Record<string, unknown>)[route];
+    if (!routes.has(route) || !ALLOWED_MANIFEST_ROUTES.has(route)) {
+      throw new Error("Unsafe game API manifest: response route is unsupported");
+    }
+    if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+      throw new Error("Unsafe game API manifest: response spec must be an object");
+    }
+    const record = spec as { description?: unknown; fields?: unknown; optionalFields?: unknown };
+    assertKnownObjectKeys(record, MANIFEST_RESPONSE_KEYS, "response");
+    if (record.description !== undefined) {
+      assertSafeManifestMetadataText(record.description, "response.description", 240);
+    }
+    assertSafeResponseFieldList(record.fields, "response.fields");
+    if (record.optionalFields !== undefined) {
+      assertSafeResponseFieldList(record.optionalFields, "response.optionalFields");
+    }
+  }
+}
+
+function assertSafeResponseFieldList(value: unknown, field: string): void {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 80) {
+    throw new Error(`Unsafe game API manifest: ${field} must be a bounded non-empty array`);
+  }
+  const entries = new Set<string>();
+  for (const entry of value) {
+    if (
+      typeof entry !== "string" ||
+      entry.length < 1 ||
+      entry.length > 80 ||
+      !SAFE_RESPONSE_FIELD_PATH.test(entry) ||
+      entry.split(".").some((segment) => PROTOTYPE_PATH_SEGMENTS.has(segment))
+    ) {
+      throw new Error(`Unsafe game API manifest: ${field} contains unsafe field path`);
+    }
+    assertSafeManifestMetadataText(entry, field, 80);
+    entries.add(entry);
+  }
+  if (entries.size !== value.length) {
+    throw new Error(`Unsafe game API manifest: ${field} must not contain duplicates`);
+  }
+}
+
 function assertSafeManifestOutOfScope(value: unknown): void {
   if (!Array.isArray(value)) {
     throw new Error("Unsafe game API manifest: outOfScope must be an array");
@@ -487,7 +554,7 @@ function assertSafeManifestRequestText(value: unknown, field: string, maxLength:
   if (typeof value !== "string" || value.length < 1 || value.length > maxLength || !SAFE_MANIFEST_TEXT.test(value)) {
     throw new Error(`Unsafe game API manifest: ${field} must be bounded text`);
   }
-  const normalized = value.replace(/\bnot an account or session\b/gi, "not a sandbox authority");
+  const normalized = value.replace(/\bnot an account or session\b/gi, "not a sandbox grant");
   if (hasUnsafeManifestText(normalized)) {
     throw new Error(`Unsafe game API manifest: ${field} contains unsafe text`);
   }

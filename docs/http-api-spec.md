@@ -20,6 +20,35 @@ POST /api/game/agent-trial
 read-only, should not require a sandbox ID, and should not create or mutate
 sandbox state.
 
+The manifest may include a `responses` object keyed by route strings already
+listed in `routes`. Each response spec lists safe dot-path field names only. This
+is descriptive contract metadata, not authority.
+
+```json
+{
+  "responses": {
+    "GET /api/game/state": {
+      "description": "Fields returned by state reads.",
+      "fields": ["sandboxId", "mode", "season"],
+      "optionalFields": ["settings", "settingsSummary", "settingEffects"]
+    },
+    "POST /api/game/resolve": {
+      "description": "Fields returned by season resolution.",
+      "fields": ["resolved", "season"],
+      "optionalFields": ["changes.passiveSettings", "settings", "settingsSummary"]
+    },
+    "GET /api/game/report": {
+      "description": "Fields returned by report reads.",
+      "fields": ["text"],
+      "optionalFields": ["structured.settings", "structured.settingEffects"]
+    }
+  }
+}
+```
+
+Response contracts must not describe wallet, secret, account, production,
+deployment, feedback trust, execution, URL-fetching, or financial authority.
+
 ## Sandbox isolation
 
 Implementations may isolate in-memory sandbox state with `sandboxId`. Clients may
