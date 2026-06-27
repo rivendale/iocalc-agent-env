@@ -107,6 +107,9 @@ await bridge.callTool("iocalc.submit_command", {
 
 The MCP bridge also exposes `iocalc.get_manifest` when the wrapped adapter
 supports `getManifest()`. Manifest output is sanitized and descriptive only.
+Bridge authors can run `runIocalcMcpToolBridgeConformance(bridge)` to verify the
+fixed sandbox tool list, closed tool schemas, unsafe probe rejection, and
+non-reflective error output.
 
 ## Safety boundary
 

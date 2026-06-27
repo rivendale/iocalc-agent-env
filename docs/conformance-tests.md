@@ -18,6 +18,10 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 - Browser adapters can run `runBrowserPlayConformance()` to verify fixed-selector
   play: read state, submit one safe command, resolve one season without a seed,
   read report/log/match-history, and keep Wallet Lab out of scope.
+- MCP bridges can run `runIocalcMcpToolBridgeConformance()` to verify the fixed
+  IOCALC sandbox tool list, closed input schemas, rejection of unsafe probes,
+  and non-reflection of URL/key-like/wallet-like caller-controlled text in
+  error results.
 
 ## Future checks
 
