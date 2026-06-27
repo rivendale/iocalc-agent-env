@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import {
   DEFAULT_SAFE_CAPABILITIES,
   IOCALC_FORBIDDEN_CAPABILITIES,
@@ -25,6 +27,11 @@ import {
   createIocalcMcpToolBridge,
   runIocalcMcpToolBridgeConformance
 } from "../packages/mcp-server/dist/index.js";
+import {
+  IOCALC_MCP_PROTOCOL_VERSION,
+  handleIocalcMcpJsonRpcMessage,
+  handleIocalcMcpJsonRpcRequest
+} from "../packages/mcp-server/dist/stdio.js";
 import {
   BROWSER_IOCALC_SELECTORS,
   BrowserIocalcAdapter,
@@ -2160,6 +2167,82 @@ assert.deepEqual(
   []
 );
 
+const stdioInitialize = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
+  jsonrpc: "2.0",
+  id: 1,
+  method: "initialize",
+  params: {
+    protocolVersion: IOCALC_MCP_PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: { name: "smoke", version: "0.0.0" }
+  }
+});
+assert.equal(stdioInitialize.result.protocolVersion, IOCALC_MCP_PROTOCOL_VERSION);
+assert.equal(stdioInitialize.result.capabilities.tools.listChanged, false);
+assert.equal(stdioInitialize.result.instructions.includes("wallet"), true);
+
+const stdioTools = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
+  jsonrpc: "2.0",
+  id: 2,
+  method: "tools/list",
+  params: {
+    _meta: {
+      progressToken: "stdio-smoke"
+    }
+  }
+});
+assert.equal(stdioTools.result.tools.some((tool) => tool.name === "iocalc.submit_command"), true);
+assert.equal(stdioTools.result.tools.every((tool) => tool.inputSchema.additionalProperties === false), true);
+
+const stdioToolCall = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
+  jsonrpc: "2.0",
+  id: 3,
+  method: "tools/call",
+  params: {
+    name: "iocalc.submit_command",
+    arguments: {
+      mode: "season_duel",
+      command: "repair wall and gather wood"
+    },
+    _meta: {
+      progressToken: "stdio-smoke"
+    }
+  }
+});
+assert.equal(stdioToolCall.result.isError, false);
+assert.equal(stdioToolCall.result.structuredContent.accepted, true);
+
+const stdioUnsafeTool = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
+  jsonrpc: "2.0",
+  id: 4,
+  method: "tools/call",
+  params: {
+    name: "iocalc.wallet_withdraw_api_key_https://wallet.invalid",
+    arguments: {}
+  }
+});
+assert.equal(stdioUnsafeTool.result.isError, true);
+assert.equal(stdioUnsafeTool.result.content[0].text.includes("wallet_withdraw"), false);
+assert.equal(stdioUnsafeTool.result.content[0].text.includes("api_key"), false);
+assert.equal(stdioUnsafeTool.result.content[0].text.includes("wallet.invalid"), false);
+
+const stdioUnsupportedMethod = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
+  jsonrpc: "2.0",
+  id: 5,
+  method: "wallet.approve_https://wallet.invalid",
+  params: { api_key: "hunter2" }
+});
+assert.equal(stdioUnsupportedMethod.error.code, -32601);
+assert.equal(stdioUnsupportedMethod.error.message.includes("wallet"), false);
+assert.equal(stdioUnsupportedMethod.error.message.includes("hunter2"), false);
+
+const stdioBadJson = await handleIocalcMcpJsonRpcMessage(mcpBridge, "{wallet:");
+assert.equal(stdioBadJson.error.code, -32700);
+assert.equal(stdioBadJson.error.message.includes("wallet"), false);
+
+const stdioOversizedJson = await handleIocalcMcpJsonRpcMessage(mcpBridge, "x".repeat(70000));
+assert.equal(stdioOversizedJson.error.code, -32700);
+
 const mcpOriginalFetch = globalThis.fetch;
 const mcpHttpRequests = [];
 globalThis.fetch = async (url) => {
@@ -2211,6 +2294,88 @@ assert.throws(
   () => createIocalcHttpMcpToolBridge({ baseUrl: "http://127.0.0.1:8090", sandboxId: "api_key" }),
   /sandboxId/
 );
+
+const stdioSandbox = await startLocalMcpSandboxServer();
+const stdioChild = spawn(
+  process.execPath,
+  [
+    "packages/mcp-server/dist/stdio.js",
+    "--base-url",
+    stdioSandbox.baseUrl,
+    "--sandbox-id",
+    "stdio-smoke"
+  ],
+  {
+    cwd: process.cwd(),
+    stdio: ["pipe", "pipe", "pipe"]
+  }
+);
+const stdioLines = createStdioLineReader(stdioChild.stdout);
+const stdioExit = createChildExitWatcher(stdioChild);
+let stdioStderr = "";
+stdioChild.stderr.setEncoding("utf8");
+stdioChild.stderr.on("data", (chunk) => {
+  stdioStderr += chunk;
+});
+
+try {
+  sendJsonRpcLine(stdioChild, 11, "initialize", {
+    protocolVersion: IOCALC_MCP_PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: { name: "stdio-smoke", version: "0.0.0" }
+  });
+  const spawnedInitialize = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedInitialize.result.serverInfo.name, "iocalc-mcp-server");
+
+  sendJsonRpcLine(stdioChild, 12, "tools/list", {});
+  const spawnedTools = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedTools.result.tools.some((tool) => tool.name === "iocalc.get_capabilities"), true);
+
+  sendJsonRpcLine(stdioChild, 13, "tools/call", {
+    name: "iocalc.get_capabilities",
+    arguments: {}
+  });
+  const spawnedCapabilities = JSON.parse(await stdioLines.nextLine());
+  assertSafeCapabilities(spawnedCapabilities.result.structuredContent);
+
+  sendJsonRpcLine(stdioChild, 14, "tools/call", {
+    name: "iocalc.submit_command",
+    arguments: {
+      mode: "season_duel",
+      command: "repair wall and gather wood"
+    }
+  });
+  const spawnedCommand = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedCommand.result.structuredContent.accepted, true);
+  assert.equal(spawnedCommand.result.structuredContent.command, "repair wall and gather wood");
+
+  sendJsonRpcLine(stdioChild, 15, "tools/call", {
+    name: "iocalc.wallet_withdraw_api_key_https://wallet.invalid",
+    arguments: {}
+  });
+  const spawnedUnsafeTool = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedUnsafeTool.result.isError, true);
+  assert.equal(spawnedUnsafeTool.result.content[0].text.includes("wallet_withdraw"), false);
+  assert.equal(spawnedUnsafeTool.result.content[0].text.includes("api_key"), false);
+  assert.equal(spawnedUnsafeTool.result.content[0].text.includes("wallet.invalid"), false);
+
+  sendJsonRpcLine(stdioChild, 16, "wallet.approve_https://wallet.invalid", { api_key: "hunter2" });
+  const spawnedUnsafeMethod = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedUnsafeMethod.error.code, -32601);
+  assert.equal(spawnedUnsafeMethod.error.message.includes("wallet"), false);
+  assert.equal(spawnedUnsafeMethod.error.message.includes("hunter2"), false);
+} finally {
+  stdioChild.stdin.end();
+  const exitResult = await stdioExit.wait(2000);
+  assert.equal(exitResult.timedOut, false);
+  assert.equal(exitResult.code, 0);
+  assert.equal(exitResult.signal, null);
+  await stdioSandbox.close();
+}
+
+assert.equal(stdioStderr, "");
+assert.equal(stdioSandbox.requests.every((request) => request.startsWith("GET /api/game/") || request.startsWith("POST /api/game/")), true);
+assert.equal(stdioSandbox.requests.some((request) => request.includes("/wallet")), false);
 
 const sampleReport = {
   text: "Season report",
@@ -2378,3 +2543,195 @@ assert.equal(
   unsafeTrialResults.some((result) => result.name === "agent-trial-audit-0" && !result.passed),
   true
 );
+
+async function startLocalMcpSandboxServer() {
+  const requests = [];
+  let season = 1;
+  let command = "";
+  const server = createServer(async (request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    requests.push(`${request.method} ${requestUrl.pathname}`);
+
+    try {
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/manifest") {
+        sendJson(response, 200, sampleGameApiManifest);
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/capabilities") {
+        sendJson(response, 200, { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: true });
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/state") {
+        sendJson(response, 200, {
+          mode: "season_duel",
+          season,
+          pendingCommand: command,
+          sandboxId: requestUrl.searchParams.get("sandboxId") ?? undefined
+        });
+        return;
+      }
+      if (request.method === "POST" && requestUrl.pathname === "/api/game/command") {
+        const body = await readJsonBody(request);
+        command = String(body.command ?? "").trim();
+        sendJson(response, 200, {
+          accepted: true,
+          command,
+          sandboxId: body.sandboxId
+        });
+        return;
+      }
+      if (request.method === "POST" && requestUrl.pathname === "/api/game/resolve") {
+        season += 1;
+        sendJson(response, 200, { resolved: true, season });
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/report") {
+        sendJson(response, 200, { text: `Season ${season} report`, structured: { season } });
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/log") {
+        sendJson(response, 200, { entries: [`Season ${season} log`] });
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/match-history") {
+        sendJson(response, 200, { matches: [{ season }] });
+        return;
+      }
+      if (request.method === "POST" && requestUrl.pathname === "/api/game/agent-trial") {
+        sendJson(response, 200, {
+          scorecard: { winner: "iocalc-agent-0001" },
+          transcript: { transport: "mcp", startedAt: "2026-06-27T00:00:00Z", events: [] }
+        });
+        return;
+      }
+      sendJson(response, 404, { error: "not found" });
+    } catch {
+      sendJson(response, 500, { error: "sandbox server error" });
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  assert.equal(typeof address, "object");
+  assert.notEqual(address, null);
+  assert.equal(typeof address.port, "number");
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      })
+  };
+}
+
+async function readJsonBody(request) {
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > 8192) {
+      throw new Error("body too large");
+    }
+  }
+  return body ? JSON.parse(body) : {};
+}
+
+function sendJson(response, status, body) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body));
+}
+
+function createStdioLineReader(stream) {
+  let buffer = "";
+  let ended = false;
+  const queue = [];
+  const waiters = [];
+
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk) => {
+    buffer += chunk;
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      const waiter = waiters.shift();
+      if (waiter) {
+        clearTimeout(waiter.timer);
+        waiter.resolve(line);
+      } else {
+        queue.push(line);
+      }
+      newlineIndex = buffer.indexOf("\n");
+    }
+  });
+  stream.on("end", () => {
+    ended = true;
+    for (const waiter of waiters.splice(0)) {
+      clearTimeout(waiter.timer);
+      waiter.reject(new Error("MCP stdio process ended before a response line was available."));
+    }
+  });
+
+  return {
+    nextLine(timeoutMs = 3000) {
+      if (queue.length > 0) {
+        return Promise.resolve(queue.shift());
+      }
+      if (ended) {
+        return Promise.reject(new Error("MCP stdio process ended before a response line was available."));
+      }
+      return new Promise((resolve, reject) => {
+        const waiter = {
+          resolve,
+          reject,
+          timer: setTimeout(() => {
+            const index = waiters.indexOf(waiter);
+            if (index >= 0) waiters.splice(index, 1);
+            reject(new Error("Timed out waiting for an MCP stdio response line."));
+          }, timeoutMs)
+        };
+        waiters.push(waiter);
+      });
+    }
+  };
+}
+
+function sendJsonRpcLine(child, id, method, params) {
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+}
+
+function createChildExitWatcher(child) {
+  const exit = new Promise((resolve) => {
+    child.once("exit", (code, signal) => {
+      resolve({ code, signal, timedOut: false });
+    });
+  });
+  return {
+    async wait(timeoutMs) {
+      let timeout;
+      const expired = new Promise((resolve) => {
+        timeout = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve({ code: null, signal: "SIGKILL", timedOut: true });
+        }, timeoutMs);
+      });
+      const result = await Promise.race([exit, expired]);
+      clearTimeout(timeout);
+      if (result.timedOut) {
+        await exit;
+      }
+      return result;
+    }
+  };
+}

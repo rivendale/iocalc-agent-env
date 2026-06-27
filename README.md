@@ -1,6 +1,6 @@
 # IOCALC Agent Env
 
-Open-source TypeScript protocol, adapter suite, conformance helpers, and MCP bridge scaffolding for making IOCALC playable by humans, browser agents, HTTP agents, MCP clients, and local test runners.
+Open-source TypeScript protocol, adapter suite, conformance helpers, and MCP bridge tooling for making IOCALC playable by humans, browser agents, HTTP agents, MCP clients, and local test runners.
 
 IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read game state, submit game commands, resolve deterministic seasons, read reports/logs, and run agent trials. It does **not** provide wallet access, private-key access, feedback trust mutation, production deployment access, arbitrary code execution, secrets access, or financial functionality.
 
@@ -9,7 +9,7 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 - `@iocalc/protocol` — shared types, safe capabilities, transcript helpers, and runtime command validation.
 - `@iocalc/adapters` — manual transcript, HTTP, browser, MCP, and local-core adapter implementations or stubs.
 - `@iocalc/conformance` — safety and compatibility assertions for IOCALC-compatible implementations.
-- `@iocalc/mcp-server` — MCP server scaffold exposing sandbox game tools only.
+- `@iocalc/mcp-server` — MCP tool bridge and opt-in stdio wrapper exposing sandbox game tools only.
 
 ## Design docs
 
@@ -111,6 +111,19 @@ Bridge authors can run `runIocalcMcpToolBridgeConformance(bridge)` to verify the
 fixed sandbox tool list, closed tool schemas, unsafe probe rejection, and
 non-reflective error output.
 
+For local MCP stdio clients, `@iocalc/mcp-server` also ships an opt-in stdio
+wrapper around the same safe bridge:
+
+```bash
+pnpm --filter @iocalc/mcp-server build
+IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-agent-001 node packages/mcp-server/dist/stdio.js
+```
+
+The stdio wrapper speaks JSON-RPC over stdin/stdout and supports `initialize`,
+`ping`, `tools/list`, and `tools/call`. It does not bind a port, hold secrets,
+or add any tool authority beyond `createIocalcHttpMcpToolBridge`. Installed
+packages can use the `iocalc-mcp-server` binary.
+
 ## Safety boundary
 
 Allowed:
@@ -134,4 +147,4 @@ Forbidden:
 
 ## Status
 
-Initial scaffold. The protocol, HTTP/manual/browser adapters, and SDK-adaptable MCP tool bridge are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and future `/api/game/*` sandbox endpoints.
+Initial scaffold. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, and opt-in MCP stdio wrapper are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.

@@ -66,6 +66,19 @@ The HTTP bridge factory accepts only localhost/127.0.0.1/[::1] roots for local
 development or HTTPS `iocalc.com` / `play.iocalc.com` roots. It rejects
 credentials, query strings, hashes, nested paths, and non-approved hosts.
 
-The package intentionally does not start a process, bind a port, hold secrets,
-or create account/session/wallet authority. A follow-up slice can wire this
-bridge to the official MCP SDK transport without changing the sandbox boundary.
+## Opt-in stdio wrapper
+
+The package also ships `@iocalc/mcp-server/stdio` and the `iocalc-mcp-server`
+binary. This wrapper is opt-in and dependency-free: it speaks JSON-RPC over
+stdin/stdout, supports `initialize`, `ping`, `tools/list`, and `tools/call`, and
+then delegates every tool call to the same safe bridge.
+
+```bash
+IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-agent-001 iocalc-mcp-server
+```
+
+The wrapper does not bind a port, hold secrets, create account/session/wallet
+authority, fetch arbitrary URLs, or add any tools. `IOCALC_BASE_URL` is still
+validated by `createIocalcHttpMcpToolBridge`, so local development targets must
+be localhost/127.0.0.1/[::1] roots and approved public targets must use HTTPS
+`iocalc.com` or `play.iocalc.com` roots.
