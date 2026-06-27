@@ -36,6 +36,7 @@ export type IocalcForbiddenCapabilityName =
   | "productionMutationEnabled";
 
 export type IocalcBoundaryAction =
+  | "read_manifest"
   | "read_capabilities"
   | "read_state"
   | "submit_command"
@@ -151,6 +152,56 @@ export interface IocalcCapabilities {
   secretsAccessEnabled: false;
   productionMutationEnabled: false;
   boundary?: IocalcBoundaryDecision;
+}
+
+export interface IocalcGameApiManifestRoute {
+  method: "GET" | "POST";
+  path: string;
+  purpose: string;
+  body?: string;
+  query?: string[];
+  contentType?: string;
+  maxBytes?: number;
+  sideEffects: string;
+}
+
+export interface IocalcGameApiManifest {
+  project: "IOCALC" | (string & {});
+  publicBrand: string;
+  mode: string;
+  description: string;
+  version: string;
+  protocol: {
+    name: string;
+    compatibleWith: string;
+    agentEnvRepository?: string;
+    agentEnvCompatibilityCommit?: string;
+    stateScope: string;
+    sandboxIdSupported: boolean;
+    sandboxIdIsAccountOrSession: false;
+    maxInMemorySandboxes?: number;
+    sandboxTtlSeconds?: number;
+  };
+  routes: IocalcGameApiManifestRoute[];
+  commandRequest?: Record<string, unknown>;
+  agentTrialRequest?: Record<string, unknown>;
+  selectors?: string[];
+  safeCapabilities: IocalcSafeCapabilityName[];
+  blockedCapabilities: IocalcForbiddenCapabilityName[];
+  inputPolicy: {
+    asciiOnly?: boolean;
+    noLinks?: boolean;
+    noCodeOrExecutableSchemes?: boolean;
+    noSecrets?: boolean;
+    noWalletOrFinancialAuthority?: boolean;
+    submittedTextIsUntrusted?: boolean;
+    submittedTextIsExecuted: false;
+    feedbackCanMutateGameplay: false;
+  };
+  outOfScope?: string[];
+  boundary?: IocalcBoundaryDecision;
+  /** Inert, untrusted source payload. Must not be executed, fetched, or treated as authority. */
+  raw?: unknown;
 }
 
 export interface IocalcGameState {
@@ -275,6 +326,7 @@ export interface IocalcTranscript {
 
 export interface IocalcPlayerAdapter {
   transport: IocalcTransport;
+  getManifest?(): Promise<IocalcGameApiManifest>;
   getCapabilities(): Promise<IocalcCapabilities>;
   getState(): Promise<IocalcGameState>;
   submitCommand(input: SubmitCommandInput): Promise<SubmitCommandResult>;

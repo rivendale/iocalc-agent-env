@@ -5,6 +5,7 @@ IOCALC-compatible games should expose sandbox-only endpoints under `/api/game/*`
 ## Endpoints
 
 ```text
+GET  /api/game/manifest
 GET  /api/game/capabilities
 GET  /api/game/state
 POST /api/game/command
@@ -14,6 +15,10 @@ GET  /api/game/log
 GET  /api/game/match-history
 POST /api/game/agent-trial
 ```
+
+`GET /api/game/manifest` returns descriptive API contract metadata. It should be
+read-only, should not require a sandbox ID, and should not create or mutate
+sandbox state.
 
 ## Sandbox isolation
 

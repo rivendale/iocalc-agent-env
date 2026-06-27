@@ -2,9 +2,12 @@ import { HttpIocalcAdapter, type HttpIocalcAdapterOptions } from "@iocalc/adapte
 import {
   DEFAULT_SAFE_CAPABILITIES,
   assertSafeCapabilities,
+  assertSandboxGameApiManifest,
   normalizeGameCommand,
   type AgentTrialResult,
   type IocalcCapabilities,
+  type IocalcGameApiManifest,
+  type IocalcGameApiManifestRoute,
   type IocalcGameState,
   type IocalcMatchHistory,
   type IocalcMode,
@@ -30,6 +33,7 @@ export interface IocalcMcpToolSpec {
 }
 
 export type IocalcMcpToolName =
+  | "iocalc.get_manifest"
   | "iocalc.get_capabilities"
   | "iocalc.get_state"
   | "iocalc.submit_command"
@@ -91,6 +95,11 @@ const SANDBOX_ID_SCHEMA = {
 } as const;
 
 export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
+  {
+    name: "iocalc.get_manifest",
+    description: "Read the sandbox IOCALC game API manifest. Descriptive only; grants no wallet, production, account, or financial authority.",
+    inputSchema: EMPTY_OBJECT_SCHEMA
+  },
   {
     name: "iocalc.get_capabilities",
     description: "Read sandbox IOCALC adapter capabilities. Must report wallet and production actions disabled.",
@@ -170,6 +179,35 @@ const SAFE_CAPABILITY_KEYS = new Set([
   "canReadReport",
   "canRunAgentTrial"
 ]);
+const SAFE_MANIFEST_ROUTES = new Set([
+  "GET /api/game/manifest",
+  "GET /api/game/capabilities",
+  "GET /api/game/state",
+  "POST /api/game/command",
+  "POST /api/game/resolve",
+  "GET /api/game/report",
+  "GET /api/game/log",
+  "GET /api/game/match-history",
+  "POST /api/game/agent-trial"
+]);
+const SAFE_MANIFEST_SIDE_EFFECTS = new Set([
+  "none",
+  "audit-read-event-only",
+  "sandbox-pending-command-only",
+  "sandbox-season-state-only",
+  "sandbox-trial-state-only"
+]);
+const MANIFEST_ROUTE_SIDE_EFFECTS = new Map<string, string>([
+  ["GET /api/game/manifest", "none"],
+  ["GET /api/game/capabilities", "none"],
+  ["GET /api/game/state", "audit-read-event-only"],
+  ["POST /api/game/command", "sandbox-pending-command-only"],
+  ["POST /api/game/resolve", "sandbox-season-state-only"],
+  ["GET /api/game/report", "audit-read-event-only"],
+  ["GET /api/game/log", "audit-read-event-only"],
+  ["GET /api/game/match-history", "audit-read-event-only"],
+  ["POST /api/game/agent-trial", "sandbox-trial-state-only"]
+]);
 const CONTROLLER_TYPES = new Set(["human", "advisor-fallback", "local-heuristic-ai", "scripted-agent", "future-remote-agent"]);
 const COMMAND_SOURCES = new Set(["human", "ai", "fallback", "scripted", "manual", "browser", "http", "mcp", "local-core"]);
 const TRANSPORTS = new Set(["manual", "browser", "http", "mcp", "local-core"]);
@@ -179,12 +217,44 @@ const FORBIDDEN_MCP_TEXT =
 const FORBIDDEN_MCP_TEXT_GLOBAL = new RegExp(FORBIDDEN_MCP_TEXT.source, "gi");
 const SENSITIVE_RESULT_KEY =
   /(?:account|api.*key|auth|bearer|cookie|credential|deploy|financial|key|mnemonic|oauth|password|permission|private|production|secret|session|token|transaction|wallet|withdraw)/i;
+const UNSAFE_MANIFEST_COMPACT_TERMS = [
+  "apikey",
+  "privatekey",
+  "seedphrase",
+  "mnemonic",
+  "password",
+  "bearer",
+  "accesstoken",
+  "authtoken",
+  "oauthtoken",
+  "refreshtoken",
+  "token",
+  "secret",
+  "credential",
+  "wallet",
+  "transaction",
+  "payment",
+  "payout",
+  "withdraw",
+  "account",
+  "session",
+  "production",
+  "deploy",
+  "financial",
+  "shell",
+  "execute",
+  "execution",
+  "eval",
+  "code"
+];
 const OFFICIAL_HTTP_HOSTS = new Set(["iocalc.com", "play.iocalc.com"]);
 const LOCAL_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const CANONICAL_AGENT_ID_PATTERN = /^iocalc-(?:agent|guide|runner|referee)-[0-9]{4}$/;
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,78}[A-Za-z0-9])?$/;
 const SECRET_SANDBOX_PATTERN =
   /(?:api[._-]*key|private[._-]*key|seed[._-]*phrase|mnemonic|password|(?:access|auth|bearer|oauth|refresh)[._-]*token|token|secret|credential|passwd)/i;
+const COMMAND_REQUEST_FIELD_KEYS = ["sandboxId", "mode", "agentName", "command", "seed"];
+const AGENT_TRIAL_REQUEST_FIELD_KEYS = ["sandboxId", "agentA", "agentB", "seasons", "seed"];
 
 export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcMcpToolBridge {
   return {
@@ -196,6 +266,14 @@ export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcM
 
       try {
         switch (name) {
+          case "iocalc.get_manifest": {
+            assertNoArgs(args);
+            await getSafeCapabilities(adapter);
+            if (!adapter.getManifest) {
+              return errorResult("Adapter does not expose a sandbox game API manifest.");
+            }
+            return okResult(sanitizeGameApiManifest(await adapter.getManifest()));
+          }
           case "iocalc.get_capabilities":
             assertNoArgs(args);
             return okResult(await getSafeCapabilities(adapter));
@@ -321,6 +399,99 @@ function sanitizeCapabilities(capabilities: IocalcCapabilities): IocalcCapabilit
     canReadReport: Boolean(capabilities.canReadReport),
     canRunAgentTrial: Boolean(capabilities.canRunAgentTrial)
   };
+}
+
+function sanitizeGameApiManifest(manifest: IocalcGameApiManifest): IocalcGameApiManifest {
+  assertSandboxGameApiManifest(manifest);
+  return dropUndefined({
+    project: "IOCALC",
+    publicBrand: sanitizeManifestText(manifest.publicBrand) ?? "IOCALC: Agent Trials",
+    mode: sanitizeManifestText(manifest.mode) ?? "Season Duel",
+    description: sanitizeManifestText(manifest.description, 400) ?? "",
+    version: sanitizeManifestText(manifest.version, 40) ?? "",
+    protocol: dropUndefined({
+      name: sanitizeManifestText(manifest.protocol.name) ?? "IOCALC Agent Env HTTP",
+      compatibleWith: sanitizeManifestText(manifest.protocol.compatibleWith) ?? "iocalc-agent-env",
+      agentEnvRepository: manifest.protocol.agentEnvRepository === "rivendale/iocalc-agent-env" ? manifest.protocol.agentEnvRepository : undefined,
+      agentEnvCompatibilityCommit:
+        typeof manifest.protocol.agentEnvCompatibilityCommit === "string" &&
+        /^[a-f0-9]{40}$/i.test(manifest.protocol.agentEnvCompatibilityCommit)
+          ? manifest.protocol.agentEnvCompatibilityCommit
+          : undefined,
+      stateScope: sanitizeManifestText(manifest.protocol.stateScope, 160) ?? "isolated in-memory server sandbox only",
+      sandboxIdSupported: Boolean(manifest.protocol.sandboxIdSupported),
+      sandboxIdIsAccountOrSession: false,
+      maxInMemorySandboxes: sanitizeOptionalNumber(manifest.protocol.maxInMemorySandboxes),
+      sandboxTtlSeconds: sanitizeOptionalNumber(manifest.protocol.sandboxTtlSeconds)
+    }),
+    routes: manifest.routes.map(sanitizeManifestRoute).filter((route): route is IocalcGameApiManifestRoute => Boolean(route)),
+    commandRequest: cloneManifestRequestRecord(manifest.commandRequest, COMMAND_REQUEST_FIELD_KEYS),
+    agentTrialRequest: cloneManifestRequestRecord(manifest.agentTrialRequest, AGENT_TRIAL_REQUEST_FIELD_KEYS),
+    selectors: manifest.selectors
+      ?.map((selector) => sanitizeManifestSelector(selector))
+      .filter((selector): selector is string => Boolean(selector)),
+    safeCapabilities: manifest.safeCapabilities.filter((capability) => SAFE_CAPABILITY_KEYS.has(capability)),
+    blockedCapabilities: manifest.blockedCapabilities.filter((capability) =>
+      DEFAULT_SAFE_CAPABILITIES[capability as keyof IocalcCapabilities] === false
+    ),
+    inputPolicy: {
+      asciiOnly: Boolean(manifest.inputPolicy.asciiOnly),
+      noLinks: Boolean(manifest.inputPolicy.noLinks),
+      noCodeOrExecutableSchemes: Boolean(manifest.inputPolicy.noCodeOrExecutableSchemes),
+      noSecrets: Boolean(manifest.inputPolicy.noSecrets),
+      noWalletOrFinancialAuthority: Boolean(manifest.inputPolicy.noWalletOrFinancialAuthority),
+      submittedTextIsUntrusted: Boolean(manifest.inputPolicy.submittedTextIsUntrusted),
+      submittedTextIsExecuted: false,
+      feedbackCanMutateGameplay: false
+    },
+    outOfScope: manifest.outOfScope?.map((item) => sanitizeManifestText(item, 120)).filter((item): item is string => Boolean(item))
+  }) as unknown as IocalcGameApiManifest;
+}
+
+function cloneManifestRequestRecord(
+  record: Record<string, unknown> | undefined,
+  fieldKeys: readonly string[]
+): Record<string, unknown> | undefined {
+  if (!record || typeof record !== "object" || !record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+    return undefined;
+  }
+  const fields: Record<string, string> = {};
+  const sourceFields = record.fields as Record<string, unknown>;
+  for (const key of fieldKeys) {
+    if (typeof sourceFields[key] === "string") {
+      fields[key] = sourceFields[key];
+    }
+  }
+  return dropUndefined({
+    contentType: record.contentType === "application/json" ? "application/json" : undefined,
+    fields,
+    allowedCommandVocabulary:
+      typeof record.allowedCommandVocabulary === "string" ? record.allowedCommandVocabulary : undefined,
+    maxCommandChars: Number.isInteger(record.maxCommandChars) ? record.maxCommandChars : undefined
+  });
+}
+
+function sanitizeManifestRoute(route: IocalcGameApiManifestRoute): IocalcGameApiManifestRoute | undefined {
+  if (route.method !== "GET" && route.method !== "POST") return undefined;
+  const routeKey = `${route.method} ${route.path}`;
+  if (typeof route.path !== "string" || !SAFE_MANIFEST_ROUTES.has(routeKey)) return undefined;
+  const sideEffects = MANIFEST_ROUTE_SIDE_EFFECTS.get(routeKey);
+  if (!sideEffects || !SAFE_MANIFEST_SIDE_EFFECTS.has(route.sideEffects) || route.sideEffects !== sideEffects) return undefined;
+  return dropUndefined({
+    method: route.method,
+    path: route.path,
+    purpose: sanitizeManifestText(route.purpose, 240) ?? "",
+    body: sanitizeManifestText(route.body, 80),
+    query: route.query?.map((item) => sanitizeManifestText(item, 40)).filter((item): item is string => Boolean(item)),
+    contentType: route.contentType === "application/json" ? "application/json" : undefined,
+    maxBytes: sanitizeOptionalNumber(route.maxBytes),
+    sideEffects
+  }) as unknown as IocalcGameApiManifestRoute;
+}
+
+function sanitizeManifestSelector(selector: unknown): string | undefined {
+  if (typeof selector !== "string") return undefined;
+  return /^data-testid="[A-Za-z0-9_-]+"$/.test(selector) ? selector : undefined;
 }
 
 function sanitizeGameState(state: IocalcGameState): IocalcGameState {
@@ -490,6 +661,19 @@ function sanitizeVisibleText(value: unknown, maxLength = 4000): string | undefin
 
 function sanitizeShortText(value: unknown): string | undefined {
   return sanitizeVisibleText(value, MAX_MCP_SHORT_TEXT_LENGTH);
+}
+
+function sanitizeManifestText(value: unknown, maxLength = 160): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, maxLength);
+  if (!/^[A-Za-z0-9 .,:;!?'"()_\/&+-]+$/.test(trimmed)) return undefined;
+  if (redactSensitiveText(trimmed) !== trimmed || hasUnsafeManifestText(trimmed)) return undefined;
+  return trimmed;
+}
+
+function hasUnsafeManifestText(value: string): boolean {
+  const compact = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return UNSAFE_MANIFEST_COMPACT_TERMS.some((term) => compact.includes(term));
 }
 
 function redactSensitiveText(value: string): string {

@@ -41,11 +41,16 @@ wallet approvals, production approvals, or feedback trust signals.
 ## Core contract
 
 ```ts
+const manifest = await adapter.getManifest?.();
 const state = await adapter.getState();
 await adapter.submitCommand({ mode: "season_duel", command: "repair wall and gather wood" });
 const resolution = await adapter.resolveSeason({ seed: "demo-seed" });
 const report = await adapter.getReport();
 ```
+
+`getManifest()` is optional because manual and browser transports may not expose
+the HTTP manifest directly. HTTP adapters use `GET /api/game/manifest` and do
+not send sandbox IDs for that static contract read.
 
 HTTP callers can isolate state with a sandbox ID:
 
@@ -94,6 +99,9 @@ await bridge.callTool("iocalc.submit_command", {
   command: "repair wall and gather wood"
 });
 ```
+
+The MCP bridge also exposes `iocalc.get_manifest` when the wrapped adapter
+supports `getManifest()`. Manifest output is sanitized and descriptive only.
 
 ## Safety boundary
 
