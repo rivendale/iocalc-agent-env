@@ -248,6 +248,7 @@ export function assertSandboxGameApiManifest(manifest: IocalcGameApiManifest): v
     throw new Error("Unsafe game API manifest: expected object");
   }
   assertKnownObjectKeys(manifest, MANIFEST_KEYS, "manifest");
+  assertDataOnlyManifestGraph(manifest);
   if (manifest.project !== "IOCALC") {
     throw new Error("Unsafe game API manifest: project must be IOCALC");
   }
@@ -412,6 +413,48 @@ function assertKnownObjectKeys(value: object, allowedKeys: Set<string>, field: s
     if (typeof key !== "string" || !allowedKeys.has(key)) {
       throw new Error(`Unsafe game API manifest: ${field} contains unsupported key`);
     }
+  }
+}
+
+function assertDataOnlyManifestGraph(value: unknown, seen = new WeakSet<object>()): void {
+  if (typeof value === "function") {
+    throw new Error("Unsafe game API manifest: contains executable value");
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  if (seen.has(value)) {
+    return;
+  }
+  seen.add(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value)) {
+    if (prototype !== Array.prototype) {
+      throw new Error("Unsafe game API manifest: contains unsupported prototype");
+    }
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !("value" in descriptor)) {
+        throw new Error("Unsafe game API manifest: contains accessor property");
+      }
+      assertDataOnlyManifestGraph(descriptor.value, seen);
+    }
+    for (const key of Reflect.ownKeys(value)) {
+      if (key !== "length" && (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key))) {
+        throw new Error("Unsafe game API manifest: contains unsupported array key");
+      }
+    }
+    return;
+  }
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error("Unsafe game API manifest: contains unsupported prototype");
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) {
+      throw new Error("Unsafe game API manifest: contains accessor property");
+    }
+    assertDataOnlyManifestGraph(descriptor.value, seen);
   }
 }
 

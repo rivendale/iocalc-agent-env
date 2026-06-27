@@ -6,6 +6,8 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 
 - `getCapabilities()` returns safe capability flags.
 - Optional `getManifest()` returns a sandbox-only API contract when supported.
+- If the manifest includes `responses`, required response fields are checked
+  against live sandbox responses for state, resolve, and report routes.
 - Wallet actions remain disabled.
 - Feedback cannot mutate gameplay.
 - External URL fetching remains disabled.
