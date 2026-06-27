@@ -5,6 +5,7 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 ## Initial checks
 
 - `getCapabilities()` returns safe capability flags.
+- Optional `getManifest()` returns a sandbox-only API contract when supported.
 - Wallet actions remain disabled.
 - Feedback cannot mutate gameplay.
 - External URL fetching remains disabled.

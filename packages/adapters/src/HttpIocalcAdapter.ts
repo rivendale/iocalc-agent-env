@@ -2,6 +2,7 @@ import {
   normalizeGameCommand,
   type AgentTrialResult,
   type IocalcCapabilities,
+  type IocalcGameApiManifest,
   type IocalcGameState,
   type IocalcMatchHistory,
   type IocalcPlayerAdapter,
@@ -100,6 +101,10 @@ export class HttpIocalcAdapter implements IocalcPlayerAdapter {
 
   getCapabilities(): Promise<IocalcCapabilities> {
     return getJson(endpointUrl(this.baseUrl, "api/game/capabilities", this.sandboxId), this.sandboxId);
+  }
+
+  getManifest(): Promise<IocalcGameApiManifest> {
+    return getJson(endpointUrl(this.baseUrl, "api/game/manifest"));
   }
 
   getState(): Promise<IocalcGameState> {

@@ -5,6 +5,7 @@ The MCP bridge should be a thin wrapper around the same sandbox protocol used by
 ## Proposed tools
 
 ```text
+iocalc.get_manifest
 iocalc.get_capabilities
 iocalc.get_state
 iocalc.submit_command
@@ -40,6 +41,8 @@ const result = await bridge.callTool("iocalc.submit_command", {
 
 Tool arguments are strict objects. Read tools accept no arguments. Every tool
 preflights the wrapped adapter's capabilities before calling into gameplay.
+`get_manifest` additionally requires the wrapped adapter to expose
+`getManifest()` and returns only sanitized sandbox contract metadata.
 `submit_command` rejects empty command text, link-like text, code-like text,
 secret-like text, wallet/account/production/deployment/financial terms, and
 unexpected argument fields before calling the adapter. `run_agent_trial` accepts

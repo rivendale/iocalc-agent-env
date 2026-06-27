@@ -1,5 +1,6 @@
 import {
   assertSafeCapabilities,
+  assertSandboxGameApiManifest,
   assertSandboxAuditEvent,
   assertSandboxBoundaryDecision,
   normalizeGameCommand,
@@ -81,6 +82,32 @@ export async function runSafetyConformance(adapter: IocalcPlayerAdapter): Promis
   }
 
   return results;
+}
+
+export async function runManifestConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
+  if (!adapter.getManifest) {
+    return [];
+  }
+
+  try {
+    const manifest = await adapter.getManifest();
+    assertSandboxGameApiManifest(manifest);
+    return [
+      {
+        name: "game-api-manifest",
+        passed: true
+      },
+      ...boundaryResults("game-api-manifest", manifest)
+    ];
+  } catch (error) {
+    return [
+      {
+        name: "game-api-manifest",
+        passed: false,
+        message: error instanceof Error ? error.message : String(error)
+      }
+    ];
+  }
 }
 
 export async function runReadConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
@@ -220,6 +247,7 @@ export async function runAgentTrialConformance(
 
 export async function runAdapterConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
   return [
+    ...(await runManifestConformance(adapter)),
     ...(await runSafetyConformance(adapter)),
     ...runCommandValidationConformance(),
     ...(await runReadConformance(adapter)),

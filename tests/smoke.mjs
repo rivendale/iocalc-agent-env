@@ -4,12 +4,14 @@ import {
   IOCALC_FORBIDDEN_CAPABILITIES,
   IOCALC_SAFE_GAME_THEORY_PATTERNS,
   assertSafeCapabilities,
+  assertSandboxGameApiManifest,
   assertSandboxBoundaryDecision,
   makeSandboxBoundaryDecision,
   normalizeGameCommand
 } from "../packages/protocol/dist/index.js";
 import {
   runAgentTrialConformance,
+  runManifestConformance,
   runReadConformance,
   runResolveSeasonConformance,
   runSubmitCommandConformance
@@ -35,6 +37,407 @@ assert.equal(normalized.command, "repair wall and gather wood");
 
 const empty = normalizeGameCommand("   ");
 assert.equal(empty.accepted, false);
+
+const sampleGameApiManifest = {
+  project: "IOCALC",
+  publicBrand: "IOCALC: Agent Trials",
+  mode: "Season Duel",
+  description: "Sandbox-only game API for agent play.",
+  version: "2026-06-27",
+  protocol: {
+    name: "IOCALC Agent Env HTTP",
+    compatibleWith: "iocalc-agent-env",
+    agentEnvRepository: "rivendale/iocalc-agent-env",
+    agentEnvCompatibilityCommit: "48060bbc6b74d1bc504e0f206bae49987d5e90fa",
+    stateScope: "isolated in-memory server sandbox only",
+    sandboxIdSupported: true,
+    sandboxIdIsAccountOrSession: false,
+    maxInMemorySandboxes: 64,
+    sandboxTtlSeconds: 86400
+  },
+  routes: [
+    { method: "GET", path: "/api/game/manifest", purpose: "Read this API manifest.", body: "none", sideEffects: "none" },
+    { method: "GET", path: "/api/game/capabilities", purpose: "Read capabilities.", body: "none", sideEffects: "none" },
+    { method: "GET", path: "/api/game/state", purpose: "Read state.", query: ["sandboxId"], sideEffects: "audit-read-event-only" },
+    {
+      method: "POST",
+      path: "/api/game/command",
+      purpose: "Submit inert ASCII settlement command text.",
+      contentType: "application/json",
+      maxBytes: 8192,
+      sideEffects: "sandbox-pending-command-only"
+    },
+    {
+      method: "POST",
+      path: "/api/game/resolve",
+      purpose: "Resolve one sandbox season.",
+      contentType: "application/json",
+      maxBytes: 8192,
+      sideEffects: "sandbox-season-state-only"
+    },
+    { method: "GET", path: "/api/game/report", purpose: "Read report.", query: ["sandboxId"], sideEffects: "audit-read-event-only" },
+    { method: "GET", path: "/api/game/log", purpose: "Read log.", query: ["sandboxId"], sideEffects: "audit-read-event-only" },
+    {
+      method: "GET",
+      path: "/api/game/match-history",
+      purpose: "Read match history.",
+      query: ["sandboxId"],
+      sideEffects: "audit-read-event-only"
+    },
+    {
+      method: "POST",
+      path: "/api/game/agent-trial",
+      purpose: "Run local sandbox agent trial.",
+      contentType: "application/json",
+      maxBytes: 8192,
+      sideEffects: "sandbox-trial-state-only"
+    }
+  ],
+  commandRequest: {
+    contentType: "application/json",
+    fields: {
+      sandboxId: "Optional ASCII sandbox partition key. It is not an account or session.",
+      mode: "season_duel",
+      agentName: "Optional inert ASCII label.",
+      command: "Required printable ASCII settlement command text.",
+      seed: "Optional inert ASCII seed label."
+    },
+    allowedCommandVocabulary: "settlement gameplay vocabulary only",
+    maxCommandChars: 1200
+  },
+  agentTrialRequest: {
+    contentType: "application/json",
+    fields: {
+      sandboxId: "Optional ASCII sandbox partition key.",
+      agentA: "Optional canonical local scripted agent label.",
+      agentB: "Optional canonical local heuristic agent label.",
+      seasons: "Integer from 1 to 12.",
+      seed: "Optional inert ASCII seed label."
+    }
+  },
+  selectors: [
+    'data-testid="season-command"',
+    'data-testid="resolve-season"',
+    'data-testid="season-report"',
+    'data-testid="system-log"',
+    'data-testid="match-history"',
+    'data-testid="agent-trials-panel"'
+  ],
+  safeCapabilities: ["canReadState", "canSubmitGameCommand", "canResolveSeason", "canReadReport", "canRunAgentTrial"],
+  blockedCapabilities: [...IOCALC_FORBIDDEN_CAPABILITIES],
+  inputPolicy: {
+    asciiOnly: true,
+    noLinks: true,
+    noCodeOrExecutableSchemes: true,
+    noSecrets: true,
+    noWalletOrFinancialAuthority: true,
+    submittedTextIsUntrusted: true,
+    submittedTextIsExecuted: false,
+    feedbackCanMutateGameplay: false
+  },
+  outOfScope: ["wallet actions", "private-key handling", "accounts or sessions", "financial functionality or advice"]
+};
+assertSandboxGameApiManifest(sampleGameApiManifest);
+const triallessGameApiManifest = {
+  ...sampleGameApiManifest,
+  routes: sampleGameApiManifest.routes.filter((route) => route.path !== "/api/game/agent-trial"),
+  safeCapabilities: sampleGameApiManifest.safeCapabilities.filter((capability) => capability !== "canRunAgentTrial")
+};
+delete triallessGameApiManifest.agentTrialRequest;
+assertSandboxGameApiManifest(triallessGameApiManifest);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...triallessGameApiManifest,
+      agentTrialRequest: sampleGameApiManifest.agentTrialRequest
+    }),
+  /agentTrialRequest requires agent trial support/
+);
+const missingAgentTrialRequestManifest = { ...sampleGameApiManifest };
+delete missingAgentTrialRequestManifest.agentTrialRequest;
+assert.throws(
+  () => assertSandboxGameApiManifest(missingAgentTrialRequestManifest),
+  /agent trial route requires agentTrialRequest/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      walletAuthority: "api_key=leak"
+    }),
+  /manifest contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      raw: { walletAuthority: "api_key=leak" }
+    }),
+  /manifest contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      protocol: {
+        ...sampleGameApiManifest.protocol,
+        walletAuthority: "api_key=leak"
+      }
+    }),
+  /protocol contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: sampleGameApiManifest.routes.map((route) =>
+        route.path === "/api/game/manifest" ? { ...route, authorityUrl: "api_key=leak" } : route
+      )
+    }),
+  /route contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      inputPolicy: {
+        ...sampleGameApiManifest.inputPolicy,
+        walletAuthority: "api_key=leak"
+      }
+    }),
+  /inputPolicy contains unsupported key/
+);
+const manifestWithHiddenKey = { ...sampleGameApiManifest };
+Object.defineProperty(manifestWithHiddenKey, "walletAuthority", { value: "api_key=leak", enumerable: false });
+assert.throws(() => assertSandboxGameApiManifest(manifestWithHiddenKey), /manifest contains unsupported key/);
+const manifestSymbolKey = Symbol("walletAuthority");
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      [manifestSymbolKey]: "api_key=leak"
+    }),
+  /manifest contains unsupported key/
+);
+assertSandboxGameApiManifest({
+  ...sampleGameApiManifest,
+  boundary: makeSandboxBoundaryDecision("read_manifest", "Read sandbox manifest")
+});
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      boundary: {
+        ...makeSandboxBoundaryDecision("read_manifest", "Read sandbox manifest"),
+        reason: "api_key=leak wallet session authority"
+      }
+    }),
+  /boundary.reason contains unsafe text/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      boundary: {
+        ...makeSandboxBoundaryDecision("read_manifest", "Read sandbox manifest"),
+        raw: { apiKey: "leak" }
+      }
+    }),
+  /boundary contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: [
+        ...sampleGameApiManifest.routes,
+        {
+          method: "GET",
+          path: "/api/game/../wallet?api_key=leak",
+          purpose: "Leak unsafe route",
+          body: "none",
+          sideEffects: "none"
+        }
+      ]
+    }),
+  /unsupported route/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      description: "seedPhrase hunter2"
+    }),
+  /description contains unsafe text/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      description: "access token abc123"
+    }),
+  /description contains unsafe text/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      description: "password hunter2"
+    }),
+  /description contains unsafe text/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: sampleGameApiManifest.routes.map((route) =>
+        route.path === "/api/game/manifest" ? { ...route, sideEffects: "sandbox-season-state-only" } : route
+      )
+    }),
+  /route side effect does not match/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      selectors: [...sampleGameApiManifest.selectors, 'data-testid="api_key"']
+    }),
+  /unsafe selector/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      outOfScope: [...sampleGameApiManifest.outOfScope, "seedPhrase hunter2"]
+    }),
+  /unsupported outOfScope/
+);
+const unsafeCapabilityResults = await runManifestConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      safeCapabilities: [...sampleGameApiManifest.safeCapabilities, "api.key=leak"]
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(unsafeCapabilityResults[0].passed, false);
+assert.equal(unsafeCapabilityResults[0].message.includes("api.key"), false);
+const unsafeBoundaryResults = await runManifestConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      boundary: {
+        ...makeSandboxBoundaryDecision("read_manifest", "Read sandbox manifest"),
+        action: "api.key=leak"
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(unsafeBoundaryResults[0].passed, false);
+assert.equal(unsafeBoundaryResults[0].message.includes("api.key"), false);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      commandRequest: {
+        contentType: "application/json",
+        fields: {
+          privateKey: "Never expose this"
+        }
+      }
+    }),
+  /commandRequest.fields contains unsupported key/
+);
+const hiddenCommandRequestManifest = {
+  ...sampleGameApiManifest,
+  commandRequest: {
+    ...sampleGameApiManifest.commandRequest,
+    fields: {
+      ...sampleGameApiManifest.commandRequest.fields
+    }
+  }
+};
+Object.defineProperty(hiddenCommandRequestManifest.commandRequest.fields, "privateKey", {
+  value: "api_key=leak",
+  enumerable: false
+});
+assert.throws(() => assertSandboxGameApiManifest(hiddenCommandRequestManifest), /commandRequest.fields contains unsupported key/);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      commandRequest: {
+        contentType: "application/json",
+        fields: {
+          command: "Use wallet session authority"
+        }
+      }
+    }),
+  /commandRequest.fields.command contains unsafe text/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      inputPolicy: {
+        ...sampleGameApiManifest.inputPolicy,
+        noSecrets: false
+      }
+    }),
+  /secrets must be prohibited/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: sampleGameApiManifest.routes.filter((route) => route.path !== "/api/game/agent-trial")
+    }),
+  /agent trial route and capability must agree/
+);
 
 const adapter = new ManualTranscriptAdapter();
 const capabilities = await adapter.getCapabilities();
@@ -63,7 +466,9 @@ globalThis.fetch = async (url, init = {}) => {
   });
   const pathname = new URL(String(url)).pathname;
   const sandboxId = new URL(String(url)).searchParams.get("sandboxId") ?? "missing-sandbox";
-  const payload = pathname.endsWith("/capabilities")
+  const payload = pathname.endsWith("/manifest")
+    ? sampleGameApiManifest
+    : pathname.endsWith("/capabilities")
     ? DEFAULT_SAFE_CAPABILITIES
     : pathname.endsWith("/state")
       ? { sandboxId, mode: "season_duel", season: 0 }
@@ -108,6 +513,13 @@ assert.equal(capturedRequests[1].url.includes("sandboxId=override-sandbox"), tru
 assert.equal(capturedRequests[1].body.sandboxId, "override-sandbox");
 assert.equal(capturedRequests[2].body.sandboxId, "smoke-sandbox");
 assert.equal(capturedRequests[3].body.sandboxId, "smoke-sandbox");
+const httpManifest = await httpAdapter.getManifest();
+assertSandboxGameApiManifest(httpManifest);
+assert.equal(capturedRequests.at(-1).url.endsWith("/api/game/manifest"), true);
+assert.equal(capturedRequests.at(-1).url.includes("sandboxId="), false);
+assert.deepEqual(capturedRequests.at(-1).headers, {});
+const manifestConformance = await runManifestConformance(httpAdapter);
+assert.equal(manifestConformance.every((result) => result.passed), true);
 for (const invalidSandboxId of [
   "",
   "api_key",
@@ -360,6 +772,10 @@ assert.equal(IOCALC_SAFE_GAME_THEORY_PATTERNS.includes("signaling game"), true);
 const mcpCalls = [];
 const fakeMcpAdapter = {
   transport: "http",
+  async getManifest() {
+    mcpCalls.push(["getManifest"]);
+    return sampleGameApiManifest;
+  },
   async getCapabilities() {
     mcpCalls.push(["getCapabilities"]);
     return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: true };
@@ -397,10 +813,18 @@ const fakeMcpAdapter = {
   }
 };
 
+assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.get_manifest"), true);
 assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.submit_command"), true);
 assert.equal(IOCALC_MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false), true);
 
 const mcpBridge = createIocalcMcpToolBridge(fakeMcpAdapter);
+const mcpManifest = await mcpBridge.callTool("iocalc.get_manifest");
+assert.equal(mcpManifest.isError, undefined);
+assertSandboxGameApiManifest(mcpManifest.structuredContent);
+assert.equal(mcpManifest.content[0].text.includes("walletActionsEnabled"), true);
+assert.notEqual(mcpManifest.structuredContent.commandRequest, sampleGameApiManifest.commandRequest);
+assert.notEqual(mcpManifest.structuredContent.commandRequest.fields, sampleGameApiManifest.commandRequest.fields);
+
 const mcpCapabilities = await mcpBridge.callTool("iocalc.get_capabilities");
 assert.equal(mcpCapabilities.isError, undefined);
 assertSafeCapabilities(mcpCapabilities.structuredContent);
@@ -592,6 +1016,76 @@ const mcpUnsupportedTrial = await createIocalcMcpToolBridge({
   seasons: 1
 });
 assert.equal(mcpUnsupportedTrial.isError, true);
+
+const mcpUnsupportedManifest = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  getManifest: undefined
+}).callTool("iocalc.get_manifest");
+assert.equal(mcpUnsupportedManifest.isError, true);
+
+const mcpUnsafeManifest = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      inputPolicy: {
+        ...sampleGameApiManifest.inputPolicy,
+        submittedTextIsExecuted: true
+      }
+    };
+  }
+}).callTool("iocalc.get_manifest");
+assert.equal(mcpUnsafeManifest.isError, true);
+assert.equal(mcpUnsafeManifest.content[0].text.includes("Unsafe game API manifest"), true);
+assert.equal(mcpUnsafeManifest.content[0].text.includes("execute"), false);
+
+const mcpUnsafeRouteManifest = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      routes: [
+        ...sampleGameApiManifest.routes,
+        {
+          method: "GET",
+          path: "/api/game/../wallet?api_key=leak",
+          purpose: "Leak unsafe route",
+          body: "none",
+          sideEffects: "none"
+        }
+      ]
+    };
+  }
+}).callTool("iocalc.get_manifest");
+assert.equal(mcpUnsafeRouteManifest.isError, true);
+assert.equal(mcpUnsafeRouteManifest.content[0].text.includes("api_key"), false);
+
+const mcpSecretTextManifest = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      description: "password hunter2"
+    };
+  }
+}).callTool("iocalc.get_manifest");
+assert.equal(mcpSecretTextManifest.isError, true);
+assert.equal(mcpSecretTextManifest.content[0].text.includes("hunter2"), false);
+
+const mcpUnsafeBoundaryManifest = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      boundary: {
+        ...makeSandboxBoundaryDecision("read_manifest", "Read sandbox manifest"),
+        action: "api.key=leak"
+      }
+    };
+  }
+}).callTool("iocalc.get_manifest");
+assert.equal(mcpUnsafeBoundaryManifest.isError, true);
+assert.equal(mcpUnsafeBoundaryManifest.content[0].text.includes("api.key"), false);
 
 const unknownMcpTool = await mcpBridge.callTool("iocalc.approve_wallet_transaction");
 assert.equal(unknownMcpTool.isError, true);
