@@ -1,9 +1,11 @@
 import {
+  assertAgentGovernanceLedger,
   assertSafeCapabilities,
   assertSandboxGameApiManifest,
   assertSandboxAuditEvent,
   assertSandboxBoundaryDecision,
   normalizeGameCommand,
+  type IocalcAgentGovernanceLedger,
   type IocalcAuditEvent,
   type IocalcBoundaryDecision,
   type IocalcGameApiManifest,
@@ -57,6 +59,71 @@ function checkAuditEvent(name: string, event: unknown): ConformanceResult {
       message: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+export function runAgentGovernanceLedgerConformance(ledger: IocalcAgentGovernanceLedger): ConformanceResult[] {
+  const results: ConformanceResult[] = [];
+
+  try {
+    assertAgentGovernanceLedger(ledger);
+    results.push({ name: "agent-governance-ledger", passed: true });
+  } catch (error) {
+    return [
+      {
+        name: "agent-governance-ledger",
+        passed: false,
+        message: error instanceof Error ? error.message : String(error)
+      }
+    ];
+  }
+
+  const unsafeText = JSON.stringify(ledger).toLowerCase();
+  const unsafeNeedles = [
+    "api_key",
+    "private_key",
+    "seed phrase",
+    "mnemonic",
+    "password",
+    "hunter2",
+    "https://wallet.invalid",
+    "ftp://",
+    "javascript:",
+    "wallet.invalid"
+  ];
+  const reflected = unsafeNeedles.some((needle) => unsafeText.includes(needle));
+  results.push({
+    name: "agent-governance-no-unsafe-reflection",
+    passed: !reflected,
+    message: reflected ? "Agent governance ledger reflected unsafe caller-controlled text." : undefined
+  });
+
+  const unsafeScope = ledger.sessions.some(
+    (session) =>
+      session.policy.sandboxOnly !== true ||
+      session.policy.noWalletAuthority !== true ||
+      session.policy.noSecretsAccess !== true ||
+      session.policy.noProductionMutation !== true ||
+      session.policy.noExternalUrlFetch !== true ||
+      session.policy.noCodeExecution !== true ||
+      session.policy.noFeedbackTrustMutation !== true ||
+      session.policy.noFinancialFunctionality !== true
+  );
+  results.push({
+    name: "agent-governance-sandbox-policy",
+    passed: !unsafeScope,
+    message: unsafeScope ? "Agent governance session policy expanded beyond sandbox authority." : undefined
+  });
+
+  const nonSandboxBoundary = ledger.entries.some(
+    (entry) => entry.boundary.sandboxOnly !== true || entry.boundary.policy !== "sandbox-gameplay-only"
+  );
+  results.push({
+    name: "agent-governance-boundaries",
+    passed: !nonSandboxBoundary,
+    message: nonSandboxBoundary ? "Agent governance entry contains non-sandbox boundary metadata." : undefined
+  });
+
+  return results;
 }
 
 function boundaryResults(name: string, payload: unknown): ConformanceResult[] {

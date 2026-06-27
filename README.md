@@ -17,6 +17,8 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
   resolve, verify, and revise cycles.
 - `docs/game-theory-patterns.md` — safe sandbox game-theory patterns for
   settlement strategy and agent learning.
+- `docs/agent-governance-ledger.md` — sandbox-only evidence ledger for agent
+  sessions, boundary decisions, conformance checks, and adversarial reviews.
 
 ## Agent-readable metadata
 
@@ -37,6 +39,11 @@ Compatible responses may also include optional `boundary` and `audit` records.
 These records explain why a sandbox action was allowed or rejected and record
 the inert gameplay action that occurred. They are not permissions, accounts,
 wallet approvals, production approvals, or feedback trust signals.
+
+Agent governance ledgers may record sandbox sessions, tool calls, failure-state
+routes, contamination signals, risk bands, conformance checks, and adversarial
+reviews. They are read-only evidence records and do not grant identity,
+account, wallet, production, feedback trust, or financial authority.
 
 ## Core contract
 
