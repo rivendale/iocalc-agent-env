@@ -93,6 +93,23 @@ const sampleGameApiManifest = {
       sideEffects: "sandbox-trial-state-only"
     }
   ],
+  responses: {
+    "GET /api/game/state": {
+      description: "Fields returned by state reads.",
+      fields: ["sandboxId", "mode", "season"],
+      optionalFields: ["agents", "settings", "settingsSummary", "settingEffects", "boundary", "audit"]
+    },
+    "POST /api/game/resolve": {
+      description: "Fields returned by season resolution.",
+      fields: ["resolved", "season"],
+      optionalFields: ["changes.passiveSettings", "settings", "settingsSummary", "settingEffects", "boundary", "audit"]
+    },
+    "GET /api/game/report": {
+      description: "Fields returned by report reads.",
+      fields: ["text"],
+      optionalFields: ["structured.settings", "structured.settingEffects", "structured.settingsSummary", "boundary", "audit"]
+    }
+  },
   commandRequest: {
     contentType: "application/json",
     fields: {
@@ -174,6 +191,113 @@ assert.throws(
       raw: { walletAuthority: "api_key=leak" }
     }),
   /manifest contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/wallet": {
+          fields: ["walletBalance"]
+        }
+      }
+    }),
+  /responses contains unsupported key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          fields: ["sandboxId", "walletBalance"]
+        }
+      }
+    }),
+  /response.fields contains unsafe/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          fields: ["sandboxId", "constructor.prototype.safe"]
+        }
+      }
+    }),
+  /response.fields contains unsafe field path/
+);
+const hiddenUnsafeResponses = { ...sampleGameApiManifest.responses };
+Object.defineProperty(hiddenUnsafeResponses, "GET /api/game/state", {
+  value: { fields: ["walletBalance"] },
+  enumerable: false
+});
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: hiddenUnsafeResponses
+    }),
+  /response.fields contains unsafe/
+);
+const responseSymbolKey = Symbol("GET /api/game/state");
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        [responseSymbolKey]: { fields: ["sandboxId"] }
+      }
+    }),
+  /responses contains unsupported key/
+);
+for (const unsafeField of ["authCookie", "loginCookie", "urlFetchResult", "feedbackTrustScore"]) {
+  assert.throws(
+    () =>
+      assertSandboxGameApiManifest({
+        ...sampleGameApiManifest,
+        responses: {
+          ...sampleGameApiManifest.responses,
+          "GET /api/game/state": {
+            fields: ["sandboxId", unsafeField]
+          }
+        }
+      }),
+    /response.fields contains unsafe/
+  );
+}
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          fields: ["sandboxId"],
+          optionalFields: ["settings", "settings"]
+        }
+      }
+    }),
+  /response.optionalFields must not contain duplicates/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          fields: ["sandboxId"],
+          raw: { apiKey: "leak" }
+        }
+      }
+    }),
+  /response contains unsupported key/
 );
 assert.throws(
   () =>
@@ -782,7 +906,28 @@ const fakeMcpAdapter = {
   },
   async getState() {
     mcpCalls.push(["getState"]);
-    return { mode: "season_duel", season: 1 };
+    return {
+      mode: "season_duel",
+      season: 1,
+      settings: {
+        councilor: "quartermaster",
+        feedbackTrustScore: 7,
+        loginUrl: "local only",
+        urlFetchResult: "ok",
+        "t.r.u.s.tDelta": 1,
+        "u.r.lTarget": "blocked",
+        constructor: { polluted: true }
+      },
+      settingEffects: {
+        food: 3,
+        trustDelta: 1,
+        paymentEnabled: 1,
+        shellAccess: 1,
+        codeExecution: 1,
+        ["__proto__"]: { polluted: true }
+      },
+      settingsSummary: "Council Compact"
+    };
   },
   async submitCommand(input) {
     mcpCalls.push(["submitCommand", input]);
@@ -790,11 +935,36 @@ const fakeMcpAdapter = {
   },
   async resolveSeason(input) {
     mcpCalls.push(["resolveSeason", input]);
-    return { resolved: true, season: 2, raw: input };
+    return {
+      resolved: true,
+      season: 2,
+      raw: input,
+      settings: {
+        enterprise: "public-granaries",
+        feedbackTrustScore: 7
+      },
+      settingEffects: {
+        food: 3,
+        urlFetchResult: 1
+      },
+      settingsSummary: "Public Granaries"
+    };
   },
   async getReport() {
     mcpCalls.push(["getReport"]);
-    return { text: "Season report" };
+    return {
+      text: "Season report",
+      structured: {
+        settings: {
+          enterprise: "public-granaries",
+          loginCookie: "blocked"
+        },
+        settingEffects: {
+          food: 3,
+          trustDelta: 1
+        }
+      }
+    };
   },
   async getLog() {
     mcpCalls.push(["getLog"]);
@@ -824,10 +994,67 @@ assertSandboxGameApiManifest(mcpManifest.structuredContent);
 assert.equal(mcpManifest.content[0].text.includes("walletActionsEnabled"), true);
 assert.notEqual(mcpManifest.structuredContent.commandRequest, sampleGameApiManifest.commandRequest);
 assert.notEqual(mcpManifest.structuredContent.commandRequest.fields, sampleGameApiManifest.commandRequest.fields);
+assert.deepEqual(mcpManifest.structuredContent.responses, sampleGameApiManifest.responses);
+assert.notEqual(mcpManifest.structuredContent.responses, sampleGameApiManifest.responses);
+
+let responseFieldReadCount = 0;
+const getterManifest = {
+  ...sampleGameApiManifest,
+  responses: {
+    ...sampleGameApiManifest.responses,
+    "GET /api/game/state": {
+      description: "Fields returned by state reads.",
+      get fields() {
+        responseFieldReadCount += 1;
+        return responseFieldReadCount === 1 ? ["sandboxId"] : ["constructor.prototype.safe"];
+      },
+      optionalFields: ["settings", "u.r.lTarget"]
+    }
+  }
+};
+const getterManifestBridge = createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async getManifest() {
+    return getterManifest;
+  }
+});
+const getterManifestResult = await getterManifestBridge.callTool("iocalc.get_manifest");
+assert.equal(getterManifestResult.isError, true);
+assert.equal(getterManifestResult.content[0].text.includes("constructor.prototype.safe"), false);
 
 const mcpCapabilities = await mcpBridge.callTool("iocalc.get_capabilities");
 assert.equal(mcpCapabilities.isError, undefined);
 assertSafeCapabilities(mcpCapabilities.structuredContent);
+
+const mcpSettingsState = await mcpBridge.callTool("iocalc.get_state");
+assert.equal(mcpSettingsState.isError, undefined);
+assert.equal(mcpSettingsState.structuredContent.settings.councilor, "quartermaster");
+assert.equal(mcpSettingsState.structuredContent.settingEffects.food, 3);
+assert.equal(mcpSettingsState.structuredContent.settings.feedbackTrustScore, undefined);
+assert.equal(mcpSettingsState.structuredContent.settings.loginUrl, undefined);
+assert.equal(mcpSettingsState.structuredContent.settings.urlFetchResult, undefined);
+assert.equal(mcpSettingsState.structuredContent.settings["t.r.u.s.tDelta"], undefined);
+assert.equal(mcpSettingsState.structuredContent.settings["u.r.lTarget"], undefined);
+assert.equal(Object.hasOwn(mcpSettingsState.structuredContent.settings, "constructor"), false);
+assert.equal(mcpSettingsState.structuredContent.settings.polluted, undefined);
+assert.equal(mcpSettingsState.structuredContent.settingEffects.trustDelta, undefined);
+assert.equal(mcpSettingsState.structuredContent.settingEffects.paymentEnabled, undefined);
+assert.equal(mcpSettingsState.structuredContent.settingEffects.shellAccess, undefined);
+assert.equal(mcpSettingsState.structuredContent.settingEffects.codeExecution, undefined);
+assert.equal(Object.hasOwn(mcpSettingsState.structuredContent.settingEffects, "__proto__"), false);
+assert.equal(mcpSettingsState.structuredContent.settingEffects.polluted, undefined);
+
+const mcpSettingsResolution = await mcpBridge.callTool("iocalc.resolve_season", { seed: "settings-seed" });
+assert.equal(mcpSettingsResolution.isError, undefined);
+assert.equal(mcpSettingsResolution.structuredContent.settings.enterprise, "public-granaries");
+assert.equal(mcpSettingsResolution.structuredContent.settings.feedbackTrustScore, undefined);
+assert.equal(mcpSettingsResolution.structuredContent.settingEffects.urlFetchResult, undefined);
+
+const mcpSettingsReport = await mcpBridge.callTool("iocalc.get_report");
+assert.equal(mcpSettingsReport.isError, undefined);
+assert.equal(mcpSettingsReport.structuredContent.structured.settings.enterprise, "public-granaries");
+assert.equal(mcpSettingsReport.structuredContent.structured.settings.loginCookie, undefined);
+assert.equal(mcpSettingsReport.structuredContent.structured.settingEffects.trustDelta, undefined);
 
 const extraCapabilityBridge = createIocalcMcpToolBridge({
   ...fakeMcpAdapter,

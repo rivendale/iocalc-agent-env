@@ -165,6 +165,12 @@ export interface IocalcGameApiManifestRoute {
   sideEffects: string;
 }
 
+export interface IocalcGameApiManifestResponseSpec {
+  description?: string;
+  fields: string[];
+  optionalFields?: string[];
+}
+
 export interface IocalcGameApiManifest {
   project: "IOCALC" | (string & {});
   publicBrand: string;
@@ -183,6 +189,7 @@ export interface IocalcGameApiManifest {
     sandboxTtlSeconds?: number;
   };
   routes: IocalcGameApiManifestRoute[];
+  responses?: Record<string, IocalcGameApiManifestResponseSpec>;
   commandRequest?: Record<string, unknown>;
   agentTrialRequest?: Record<string, unknown>;
   selectors?: string[];
@@ -210,6 +217,9 @@ export interface IocalcGameState {
   season: number;
   seed?: string;
   agents?: IocalcAgentIdentity[];
+  settings?: Record<string, unknown>;
+  settingsSummary?: string;
+  settingEffects?: Record<string, unknown>;
   settlement?: Record<string, unknown>;
   resources?: Record<string, number>;
   risk?: Record<string, number>;
@@ -248,6 +258,9 @@ export interface SeasonResolution {
   season: number;
   changes?: Record<string, unknown>;
   score?: number;
+  settings?: Record<string, unknown>;
+  settingsSummary?: string;
+  settingEffects?: Record<string, unknown>;
   loopVerifier?: IocalcLoopVerifier;
   gameTheoryPattern?: IocalcGameTheoryPattern;
   visibleText?: string;
@@ -259,6 +272,9 @@ export interface SeasonResolution {
 export interface IocalcSeasonReport {
   sandboxId?: string;
   text: string;
+  settings?: Record<string, unknown>;
+  settingsSummary?: string;
+  settingEffects?: Record<string, unknown>;
   loopVerifier?: IocalcLoopVerifier;
   gameTheoryPattern?: IocalcGameTheoryPattern;
   boundary?: IocalcBoundaryDecision;
