@@ -101,6 +101,13 @@ const sampleGameApiManifest = {
       sideEffects: "audit-read-event-only"
     },
     {
+      method: "GET",
+      path: "/api/game/governance-ledger",
+      purpose: "Read sandbox governance ledger evidence.",
+      query: ["sandboxId"],
+      sideEffects: "none"
+    },
+    {
       method: "POST",
       path: "/api/game/agent-trial",
       purpose: "Run local sandbox agent trial.",
@@ -124,6 +131,11 @@ const sampleGameApiManifest = {
       description: "Fields returned by report reads.",
       fields: ["text"],
       optionalFields: ["structured.settings", "structured.settingEffects", "structured.settingsSummary", "boundary", "audit"]
+    },
+    "GET /api/game/governance-ledger": {
+      description: "Fields returned by governance ledger reads.",
+      fields: ["schemaVersion", "project", "ledgerId", "generatedAt", "policy", "entries"],
+      optionalFields: ["latestDigest", "entries.evidence", "entries.failureState", "entries.riskBand", "entries.metadata"]
     }
   },
   commandRequest: {

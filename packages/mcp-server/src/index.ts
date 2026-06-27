@@ -191,6 +191,7 @@ const SAFE_MANIFEST_ROUTES = new Set([
   "GET /api/game/report",
   "GET /api/game/log",
   "GET /api/game/match-history",
+  "GET /api/game/governance-ledger",
   "POST /api/game/agent-trial"
 ]);
 const SAFE_MANIFEST_SIDE_EFFECTS = new Set([
@@ -209,6 +210,7 @@ const MANIFEST_ROUTE_SIDE_EFFECTS = new Map<string, string>([
   ["GET /api/game/report", "audit-read-event-only"],
   ["GET /api/game/log", "audit-read-event-only"],
   ["GET /api/game/match-history", "audit-read-event-only"],
+  ["GET /api/game/governance-ledger", "none"],
   ["POST /api/game/agent-trial", "sandbox-trial-state-only"]
 ]);
 const CONTROLLER_TYPES = new Set(["human", "advisor-fallback", "local-heuristic-ai", "scripted-agent", "future-remote-agent"]);

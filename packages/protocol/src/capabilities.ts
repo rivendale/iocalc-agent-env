@@ -28,7 +28,7 @@ const REQUIRED_MANIFEST_ROUTES = [
   "GET /api/game/match-history"
 ] as const;
 
-const OPTIONAL_MANIFEST_ROUTES = ["POST /api/game/agent-trial"] as const;
+const OPTIONAL_MANIFEST_ROUTES = ["GET /api/game/governance-ledger", "POST /api/game/agent-trial"] as const;
 
 const ALLOWED_MANIFEST_ROUTES = new Set<string>([...REQUIRED_MANIFEST_ROUTES, ...OPTIONAL_MANIFEST_ROUTES]);
 
@@ -56,6 +56,7 @@ const MANIFEST_ROUTE_SIDE_EFFECTS = new Map<string, string>([
   ["GET /api/game/report", "audit-read-event-only"],
   ["GET /api/game/log", "audit-read-event-only"],
   ["GET /api/game/match-history", "audit-read-event-only"],
+  ["GET /api/game/governance-ledger", "none"],
   ["POST /api/game/agent-trial", "sandbox-trial-state-only"]
 ]);
 
@@ -63,7 +64,8 @@ const ROUTES_WITH_SANDBOX_QUERY = new Set([
   "GET /api/game/state",
   "GET /api/game/report",
   "GET /api/game/log",
-  "GET /api/game/match-history"
+  "GET /api/game/match-history",
+  "GET /api/game/governance-ledger"
 ]);
 
 const SAFE_MANIFEST_TEXT = /^[A-Za-z0-9 .,:;!?'"()_\/&+-]+$/;
