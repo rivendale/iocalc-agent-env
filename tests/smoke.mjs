@@ -11,8 +11,10 @@ import {
 } from "../packages/protocol/dist/index.js";
 import {
   runAgentTrialConformance,
+  runAdapterConformance,
   runManifestConformance,
   runReadConformance,
+  runResponseContractConformance,
   runResolveSeasonConformance,
   runSubmitCommandConformance
 } from "../packages/conformance/dist/index.js";
@@ -256,6 +258,141 @@ assert.throws(
     }),
   /responses contains unsupported key/
 );
+let manifestResponsesGetterReadCount = 0;
+const responsesAccessorManifest = { ...sampleGameApiManifest };
+Object.defineProperty(responsesAccessorManifest, "responses", {
+  enumerable: true,
+  configurable: true,
+  get() {
+    manifestResponsesGetterReadCount += 1;
+    return sampleGameApiManifest.responses;
+  }
+});
+assert.throws(() => assertSandboxGameApiManifest(responsesAccessorManifest), /accessor property/);
+assert.equal(manifestResponsesGetterReadCount, 0);
+let manifestResponseFieldsGetterReadCount = 0;
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          get fields() {
+            manifestResponseFieldsGetterReadCount += 1;
+            return ["sandboxId", "mode", "season"];
+          }
+        }
+      }
+    }),
+  /accessor property/
+);
+assert.equal(manifestResponseFieldsGetterReadCount, 0);
+let inheritedProjectGetterReadCount = 0;
+const inheritedProjectManifest = Object.create({
+  get project() {
+    inheritedProjectGetterReadCount += 1;
+    return "IOCALC";
+  }
+});
+for (const [key, value] of Object.entries(sampleGameApiManifest)) {
+  if (key !== "project") {
+    Object.defineProperty(inheritedProjectManifest, key, {
+      enumerable: true,
+      configurable: true,
+      value
+    });
+  }
+}
+assert.throws(() => assertSandboxGameApiManifest(inheritedProjectManifest), /unsupported prototype/);
+assert.equal(inheritedProjectGetterReadCount, 0);
+let inheritedFieldsGetterReadCount = 0;
+const inheritedFieldsSpec = Object.create({
+  get fields() {
+    inheritedFieldsGetterReadCount += 1;
+    return ["sandboxId", "mode", "season"];
+  }
+});
+Object.defineProperty(inheritedFieldsSpec, "description", {
+  enumerable: true,
+  configurable: true,
+  value: "Fields returned by state reads."
+});
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": inheritedFieldsSpec
+      }
+    }),
+  /unsupported prototype/
+);
+assert.equal(inheritedFieldsGetterReadCount, 0);
+const sparseRoutes = [...sampleGameApiManifest.routes];
+delete sparseRoutes[0];
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: sparseRoutes
+    }),
+  /contains accessor property/
+);
+const routesWithExtraKey = [...sampleGameApiManifest.routes];
+routesWithExtraKey.extra = "unsafe";
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: routesWithExtraKey
+    }),
+  /unsupported array key/
+);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      protocol: {
+        ...sampleGameApiManifest.protocol,
+        maxInMemorySandboxes: () => 1
+      }
+    }),
+  /executable value/
+);
+const nullPrototypeRoutes = [...sampleGameApiManifest.routes];
+Object.setPrototypeOf(nullPrototypeRoutes, null);
+assert.throws(
+  () =>
+    assertSandboxGameApiManifest({
+      ...sampleGameApiManifest,
+      routes: nullPrototypeRoutes
+    }),
+  /unsupported prototype/
+);
+let unsafeNestedKeyGetterReadCount = 0;
+const protocolWithUnsafeAccessorName = { ...sampleGameApiManifest.protocol };
+Object.defineProperty(protocolWithUnsafeAccessorName, "api_key_secret", {
+  enumerable: true,
+  configurable: true,
+  get() {
+    unsafeNestedKeyGetterReadCount += 1;
+    return "leak";
+  }
+});
+let unsafeNestedKeyError;
+try {
+  assertSandboxGameApiManifest({
+    ...sampleGameApiManifest,
+    protocol: protocolWithUnsafeAccessorName
+  });
+} catch (error) {
+  unsafeNestedKeyError = error;
+}
+assert.equal(unsafeNestedKeyGetterReadCount, 0);
+assert.match(unsafeNestedKeyError.message, /accessor property/);
+assert.equal(unsafeNestedKeyError.message.includes("api_key_secret"), false);
 for (const unsafeField of ["authCookie", "loginCookie", "urlFetchResult", "feedbackTrustScore"]) {
   assert.throws(
     () =>
@@ -595,7 +732,7 @@ globalThis.fetch = async (url, init = {}) => {
     : pathname.endsWith("/capabilities")
     ? DEFAULT_SAFE_CAPABILITIES
     : pathname.endsWith("/state")
-      ? { sandboxId, mode: "season_duel", season: 0 }
+      ? { sandboxId, mode: "season_duel", season: 0, agents: [] }
       : pathname.endsWith("/command")
         ? { accepted: true, sandboxId, command: "repair wall and gather wood", warnings: [] }
         : pathname.endsWith("/resolve")
@@ -644,6 +781,461 @@ assert.equal(capturedRequests.at(-1).url.includes("sandboxId="), false);
 assert.deepEqual(capturedRequests.at(-1).headers, {});
 const manifestConformance = await runManifestConformance(httpAdapter);
 assert.equal(manifestConformance.every((result) => result.passed), true);
+let payloadBoundaryGetterReadCount = 0;
+let payloadAuditGetterReadCount = 0;
+const payloadAccessorConformance = await runReadConformance({
+  transport: "http",
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    const state = { sandboxId: "payload-boundary", mode: "season_duel", season: 0 };
+    Object.defineProperty(state, "boundary", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        payloadBoundaryGetterReadCount += 1;
+        throw new Error("boundary getter executed");
+      }
+    });
+    return state;
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    const report = { text: "ok" };
+    Object.defineProperty(report, "audit", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        payloadAuditGetterReadCount += 1;
+        throw new Error("audit getter executed");
+      }
+    });
+    return report;
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(payloadBoundaryGetterReadCount, 0);
+assert.equal(payloadAuditGetterReadCount, 0);
+assert.equal(
+  payloadAccessorConformance.some((result) => !result.passed && result.message === "Unsafe payload boundary property."),
+  true
+);
+assert.equal(
+  payloadAccessorConformance.some((result) => !result.passed && result.message === "Unsafe payload audit property."),
+  true
+);
+let inheritedPayloadBoundaryGetterReadCount = 0;
+const inheritedPayloadConformance = await runReadConformance({
+  transport: "http",
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return Object.create({
+      get boundary() {
+        inheritedPayloadBoundaryGetterReadCount += 1;
+        throw new Error("inherited boundary getter executed");
+      }
+    });
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(inheritedPayloadBoundaryGetterReadCount, 0);
+assert.equal(inheritedPayloadConformance.every((result) => result.passed), true);
+const responseContractConformance = await runResponseContractConformance(httpAdapter);
+assert.equal(responseContractConformance.every((result) => result.passed), true);
+const noManifestResponseContractConformance = await runResponseContractConformance(adapter);
+assert.deepEqual(noManifestResponseContractConformance, []);
+const noResponsesContractConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    const manifest = { ...sampleGameApiManifest };
+    delete manifest.responses;
+    return manifest;
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.deepEqual(noResponsesContractConformance, []);
+const missingResponseFieldConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          ...sampleGameApiManifest.responses["GET /api/game/state"],
+          fields: ["sandboxId", "mode", "season", "agents"]
+        }
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "missing-required", mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(missingResponseFieldConformance.some((result) => !result.passed && result.message?.includes("agents")), true);
+const missingNestedResponseFieldConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          ...sampleGameApiManifest.responses["GET /api/game/state"],
+          fields: ["sandboxId", "summary.score"]
+        }
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "missing-nested", mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  missingNestedResponseFieldConformance.some((result) => !result.passed && result.message?.includes("summary.score")),
+  true
+);
+const undefinedNestedResponseFieldConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          ...sampleGameApiManifest.responses["GET /api/game/state"],
+          fields: ["sandboxId", "summary.score"]
+        }
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "undefined-nested", summary: { score: undefined } };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  undefinedNestedResponseFieldConformance.some((result) => !result.passed && result.message?.includes("summary.score")),
+  true
+);
+let payloadGetterReadCount = 0;
+const payloadGetterResponseFieldConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          ...sampleGameApiManifest.responses["GET /api/game/state"],
+          fields: ["sandboxId", "summary.score"]
+        }
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    const state = { sandboxId: "payload-getter" };
+    Object.defineProperty(state, "summary", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        payloadGetterReadCount += 1;
+        throw new Error("payload getter executed");
+      }
+    });
+    return state;
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(payloadGetterReadCount, 0);
+assert.equal(
+  payloadGetterResponseFieldConformance.some((result) => !result.passed && result.message?.includes("summary.score")),
+  true
+);
+const inheritedResponses = Object.create({
+  "GET /api/game/state": {
+    fields: ["sandboxId", "mode", "season", "agents"]
+  }
+});
+let inheritedResponseStateReadCount = 0;
+const inheritedResponseConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: inheritedResponses
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    inheritedResponseStateReadCount += 1;
+    return { sandboxId: "inherited", mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  inheritedResponseConformance.some((result) => !result.passed && result.message?.includes("unsupported prototype")),
+  true
+);
+assert.equal(inheritedResponseStateReadCount, 0);
+let getterResponseFieldsReadCount = 0;
+const getterResponseConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    return {
+      ...sampleGameApiManifest,
+      responses: {
+        ...sampleGameApiManifest.responses,
+        "GET /api/game/state": {
+          get fields() {
+            getterResponseFieldsReadCount += 1;
+            return ["sandboxId", "mode", "season"];
+          }
+        }
+      }
+    };
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "getter", mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  getterResponseConformance.some((result) => !result.passed && result.message?.includes("accessor property")),
+  true
+);
+assert.equal(getterResponseFieldsReadCount, 0);
+let topLevelResponsesReadCount = 0;
+const getterResponsesConformance = await runResponseContractConformance({
+  transport: "http",
+  async getManifest() {
+    const manifest = { ...sampleGameApiManifest };
+    Object.defineProperty(manifest, "responses", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        topLevelResponsesReadCount += 1;
+        return topLevelResponsesReadCount === 1 ? undefined : sampleGameApiManifest.responses;
+      }
+    });
+    return manifest;
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "getter-responses", mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return { accepted: true, command: "repair wall" };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  getterResponsesConformance.some((result) => !result.passed && result.message?.includes("accessor property")),
+  true
+);
+assert.equal(topLevelResponsesReadCount, 0);
+let sequencingResolved = false;
+let sequencingResolveCount = 0;
+const sequencingConformance = await runAdapterConformance({
+  transport: "http",
+  async getManifest() {
+    return sampleGameApiManifest;
+  },
+  async getCapabilities() {
+    return DEFAULT_SAFE_CAPABILITIES;
+  },
+  async getState() {
+    return { sandboxId: "sequencing", mode: "season_duel", season: sequencingResolved ? 1 : 0 };
+  },
+  async submitCommand(input) {
+    if (sequencingResolved) {
+      throw new Error("submit after resolve");
+    }
+    return { accepted: true, command: input.command };
+  },
+  async resolveSeason() {
+    sequencingResolveCount += 1;
+    if (sequencingResolveCount > 1) {
+      throw new Error("duplicate resolve");
+    }
+    sequencingResolved = true;
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "ok" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(sequencingConformance.every((result) => result.passed), true);
+assert.equal(sequencingResolveCount, 1);
 for (const invalidSandboxId of [
   "",
   "api_key",
@@ -1021,6 +1613,7 @@ const getterManifestBridge = createIocalcMcpToolBridge({
 const getterManifestResult = await getterManifestBridge.callTool("iocalc.get_manifest");
 assert.equal(getterManifestResult.isError, true);
 assert.equal(getterManifestResult.content[0].text.includes("constructor.prototype.safe"), false);
+assert.equal(responseFieldReadCount, 0);
 
 const mcpCapabilities = await mcpBridge.callTool("iocalc.get_capabilities");
 assert.equal(mcpCapabilities.isError, undefined);

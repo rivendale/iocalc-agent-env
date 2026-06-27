@@ -6,6 +6,7 @@ import {
   normalizeGameCommand,
   type IocalcAuditEvent,
   type IocalcBoundaryDecision,
+  type IocalcGameApiManifest,
   type IocalcPlayerAdapter,
   type ResolveSeasonInput,
   type RunAgentTrialInput,
@@ -16,6 +17,14 @@ export interface ConformanceResult {
   name: string;
   passed: boolean;
   message?: string;
+}
+
+type ResponseContractRoute = "GET /api/game/state" | "POST /api/game/resolve" | "GET /api/game/report";
+type ResponseContractPayloads = Partial<Record<ResponseContractRoute, unknown>>;
+
+interface ResponseContractConformanceOptions {
+  observedPayloads?: ResponseContractPayloads;
+  skipUnobserved?: boolean;
 }
 
 function checkBoundary(name: string, boundary: unknown): ConformanceResult {
@@ -48,21 +57,37 @@ function boundaryResults(name: string, payload: unknown): ConformanceResult[] {
   if (!payload || typeof payload !== "object") {
     return [];
   }
-  const record = payload as { boundary?: unknown; audit?: unknown };
   const results: ConformanceResult[] = [];
+  const boundary = readOwnDataProperty(payload, "boundary");
+  const audit = readOwnDataProperty(payload, "audit");
 
-  if ("boundary" in record) {
-    results.push(checkBoundary(`${name}-boundary`, record.boundary));
+  if (boundary.unsafe) {
+    results.push({ name: `${name}-boundary`, passed: false, message: "Unsafe payload boundary property." });
+  } else if (boundary.present) {
+    results.push(checkBoundary(`${name}-boundary`, boundary.value));
   }
 
-  if ("audit" in record) {
-    const audits = Array.isArray(record.audit) ? record.audit : [record.audit];
+  if (audit.unsafe) {
+    results.push({ name: `${name}-audit`, passed: false, message: "Unsafe payload audit property." });
+  } else if (audit.present) {
+    const audits = Array.isArray(audit.value) ? audit.value : [audit.value];
     audits.forEach((audit, index) => {
       results.push(checkAuditEvent(`${name}-audit-${index}`, audit));
     });
   }
 
   return results;
+}
+
+function readOwnDataProperty(payload: object, key: string): { present: boolean; unsafe: boolean; value?: unknown } {
+  const descriptor = Object.getOwnPropertyDescriptor(payload, key);
+  if (!descriptor) {
+    return { present: false, unsafe: false };
+  }
+  if (!("value" in descriptor)) {
+    return { present: true, unsafe: true };
+  }
+  return { present: true, unsafe: false, value: descriptor.value };
 }
 
 export async function runSafetyConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
@@ -110,18 +135,24 @@ export async function runManifestConformance(adapter: IocalcPlayerAdapter): Prom
   }
 }
 
-export async function runReadConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
-  const checks: Array<[string, () => Promise<unknown>]> = [
-    ["get-state", () => adapter.getState()],
-    ["get-report", () => adapter.getReport()],
-    ["get-log", () => adapter.getLog()],
-    ["get-match-history", () => adapter.getMatchHistory()]
+export async function runReadConformance(
+  adapter: IocalcPlayerAdapter,
+  observedPayloads?: ResponseContractPayloads
+): Promise<ConformanceResult[]> {
+  const checks: Array<[string, ResponseContractRoute | undefined, () => Promise<unknown>]> = [
+    ["get-state", "GET /api/game/state", () => adapter.getState()],
+    ["get-report", "GET /api/game/report", () => adapter.getReport()],
+    ["get-log", undefined, () => adapter.getLog()],
+    ["get-match-history", undefined, () => adapter.getMatchHistory()]
   ];
 
   const results: ConformanceResult[] = [];
-  for (const [name, check] of checks) {
+  for (const [name, route, check] of checks) {
     try {
       const payload = await check();
+      if (route && observedPayloads) {
+        observedPayloads[route] = payload;
+      }
       results.push({ name, passed: true });
       results.push(...boundaryResults(name, payload));
     } catch (error) {
@@ -129,6 +160,150 @@ export async function runReadConformance(adapter: IocalcPlayerAdapter): Promise<
     }
   }
   return results;
+}
+
+export async function runResponseContractConformance(
+  adapter: IocalcPlayerAdapter,
+  options: ResponseContractConformanceOptions = {}
+): Promise<ConformanceResult[]> {
+  if (!adapter.getManifest) {
+    return [];
+  }
+
+  let manifest: IocalcGameApiManifest;
+  try {
+    manifest = await adapter.getManifest();
+    assertSandboxGameApiManifest(manifest);
+  } catch (error) {
+    return [
+      {
+        name: "response-contract-manifest",
+        passed: false,
+        message: error instanceof Error ? error.message : String(error)
+      }
+    ];
+  }
+
+  const responses = snapshotManifestResponses(manifest);
+  if (responses === undefined) {
+    return [];
+  }
+  if (responses === null) {
+    return [
+      {
+        name: "response-contract-manifest",
+        passed: false,
+        message: "Unsafe response contract map."
+      }
+    ];
+  }
+
+  const checks: Array<[ResponseContractRoute, string, () => Promise<unknown>]> = [
+    ["GET /api/game/state", "response-contract-state", () => adapter.getState()],
+    ["POST /api/game/resolve", "response-contract-resolve", () => adapter.resolveSeason({ seed: "response-contract-seed" })],
+    ["GET /api/game/report", "response-contract-report", () => adapter.getReport()]
+  ];
+  const results: ConformanceResult[] = [];
+
+  for (const [route, name, read] of checks) {
+    const fields = snapshotRequiredResponseFields(responses, route);
+    if (fields === undefined) continue;
+    if (fields === null) {
+      results.push({
+        name,
+        passed: false,
+        message: "Unsafe response contract spec."
+      });
+      continue;
+    }
+    try {
+      const hasObservedPayload = Object.prototype.hasOwnProperty.call(options.observedPayloads ?? {}, route);
+      if (!hasObservedPayload && options.skipUnobserved) {
+        continue;
+      }
+      const payload = hasObservedPayload ? options.observedPayloads?.[route] : await read();
+      const missing = fields.filter((field) => !hasOwnPath(payload, field));
+      results.push({
+        name,
+        passed: missing.length === 0,
+        message: missing.length === 0 ? undefined : `Missing required response fields: ${missing.join(", ")}`
+      });
+    } catch (error) {
+      results.push({ name, passed: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return results;
+}
+
+function snapshotManifestResponses(manifest: IocalcGameApiManifest): Record<string, unknown> | undefined | null {
+  const descriptor = Object.getOwnPropertyDescriptor(manifest, "responses");
+  if (!descriptor) {
+    return undefined;
+  }
+  if (!("value" in descriptor)) {
+    return null;
+  }
+  if (descriptor.value === undefined) {
+    return undefined;
+  }
+  if (!descriptor.value || typeof descriptor.value !== "object" || Array.isArray(descriptor.value)) {
+    return null;
+  }
+  return descriptor.value as Record<string, unknown>;
+}
+
+function snapshotRequiredResponseFields(responses: Record<string, unknown>, route: string): string[] | undefined | null {
+  if (!Object.prototype.hasOwnProperty.call(responses, route)) {
+    return undefined;
+  }
+  const responseDescriptor = Object.getOwnPropertyDescriptor(responses, route);
+  if (!responseDescriptor || !("value" in responseDescriptor)) {
+    return null;
+  }
+  const spec = responseDescriptor.value;
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    return null;
+  }
+  const fieldsDescriptor = Object.getOwnPropertyDescriptor(spec, "fields");
+  if (!fieldsDescriptor || !("value" in fieldsDescriptor)) {
+    return null;
+  }
+  return snapshotStringArray(fieldsDescriptor.value);
+}
+
+function snapshotStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const fields: string[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !("value" in descriptor) || typeof descriptor.value !== "string") {
+      return null;
+    }
+    fields.push(descriptor.value);
+  }
+  return fields;
+}
+
+function hasOwnPath(payload: unknown, path: string): boolean {
+  let current = payload;
+  const parts = path.split(".");
+  for (let index = 0; index < parts.length; index += 1) {
+    if (!current || typeof current !== "object") {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(current, parts[index]);
+    if (!descriptor || !("value" in descriptor)) {
+      return false;
+    }
+    if (index === parts.length - 1) {
+      return descriptor.value !== undefined;
+    }
+    current = descriptor.value;
+  }
+  return true;
 }
 
 export function runCommandValidationConformance(): ConformanceResult[] {
@@ -189,10 +364,14 @@ export async function runResolveSeasonConformance(
   adapter: IocalcPlayerAdapter,
   input: ResolveSeasonInput = {
     seed: "conformance-seed"
-  }
+  },
+  observedPayloads?: ResponseContractPayloads
 ): Promise<ConformanceResult[]> {
   try {
     const result = await adapter.resolveSeason(input);
+    if (observedPayloads) {
+      observedPayloads["POST /api/game/resolve"] = result;
+    }
     return [
       {
         name: "resolve-season",
@@ -246,13 +425,15 @@ export async function runAgentTrialConformance(
 }
 
 export async function runAdapterConformance(adapter: IocalcPlayerAdapter): Promise<ConformanceResult[]> {
+  const observedPayloads: ResponseContractPayloads = {};
   return [
     ...(await runManifestConformance(adapter)),
     ...(await runSafetyConformance(adapter)),
     ...runCommandValidationConformance(),
-    ...(await runReadConformance(adapter)),
+    ...(await runReadConformance(adapter, observedPayloads)),
     ...(await runSubmitCommandConformance(adapter)),
-    ...(await runResolveSeasonConformance(adapter)),
-    ...(await runAgentTrialConformance(adapter))
+    ...(await runResolveSeasonConformance(adapter, undefined, observedPayloads)),
+    ...(await runAgentTrialConformance(adapter)),
+    ...(await runResponseContractConformance(adapter, { observedPayloads, skipUnobserved: true }))
   ];
 }
