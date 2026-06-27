@@ -3,14 +3,21 @@
   "version": "0.1.0",
   "type": "module",
   "license": "Apache-2.0",
-  "description": "Sandbox-only IOCALC MCP bridge scaffold.",
+  "description": "Sandbox-only IOCALC MCP bridge and opt-in stdio wrapper.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./stdio": {
+      "types": "./dist/stdio.d.ts",
+      "default": "./dist/stdio.js"
     }
+  },
+  "bin": {
+    "iocalc-mcp-server": "./dist/stdio.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

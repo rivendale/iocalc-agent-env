@@ -368,7 +368,7 @@ export function createIocalcMcpServerScaffold(adapter: IocalcPlayerAdapter) {
     status: "sdk-adapter-ready",
     tools: IOCALC_MCP_TOOLS,
     bridge: createIocalcMcpToolBridge(adapter),
-    note: "Wire this bridge to an MCP SDK transport in a follow-up slice. Keep all tools sandbox-only."
+    note: "Wire this bridge to an MCP SDK transport or the opt-in stdio wrapper. Keep all tools sandbox-only."
   };
 }
 
