@@ -15,12 +15,14 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 - Secrets access remains disabled.
 - Production mutation remains disabled.
 - State/report/log/match-history can be read when the target supports those calls.
+- Browser adapters can run `runBrowserPlayConformance()` to verify fixed-selector
+  play: read state, submit one safe command, resolve one season without a seed,
+  read report/log/match-history, and keep Wallet Lab out of scope.
 
 ## Future checks
 
 - Same seed plus same starting state plus same command resolves deterministically.
 - Commands are treated as untrusted game text.
-- Browser selectors exist and are stable.
 - Agent trial transcript contains state, command, resolution, report, and log events.
 - Optional loop verifier, game-theory pattern, and agent identity records remain
   inert metadata when present.

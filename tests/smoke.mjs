@@ -12,6 +12,7 @@ import {
 import {
   runAgentTrialConformance,
   runAdapterConformance,
+  runBrowserPlayConformance,
   runManifestConformance,
   runReadConformance,
   runResponseContractConformance,
@@ -1308,6 +1309,7 @@ function createFakeBrowserPage() {
     waitStates: [],
     fills: [],
     clicks: [],
+    locatorCalls: [],
     currentUrl: "about:blank",
     season: 0,
     goto(url, options) {
@@ -1321,6 +1323,7 @@ function createFakeBrowserPage() {
       return this.currentUrl;
     },
     locator(selector) {
+      page.locatorCalls.push(selector);
       return {
         count: () => (values.has(selector) ? 1 : 0),
         fill: (value) => {
@@ -1402,6 +1405,235 @@ const browserState = await browserAdapter.getState();
 assert.equal(browserState.mode, "season_duel");
 assert.equal(browserState.season, 1);
 assert.equal(browserState.raw.walletActionsEnabled, false);
+assert.equal(fakeBrowserPage.locatorCalls.some((selector) => /wallet|feedback|recommend/i.test(selector)), false);
+
+const browserAggregatePage = createFakeBrowserPage();
+const browserAggregateAdapter = new BrowserIocalcAdapter({
+  page: browserAggregatePage,
+  baseUrl: "http://127.0.0.1:8090/play"
+});
+const browserAggregateConformance = await runAdapterConformance(browserAggregateAdapter);
+assert.equal(browserAggregateConformance.every((result) => result.passed), true);
+assert.equal(browserAggregatePage.clicks.filter((selector) => selector === BROWSER_IOCALC_SELECTORS.resolveSeason).length, 1);
+assert.equal(browserAggregatePage.locatorCalls.some((selector) => /wallet|feedback|recommend/i.test(selector)), false);
+let browserAggregateAgentTrialCalls = 0;
+const browserAggregateTrialAdapter = new BrowserIocalcAdapter({
+  page: createFakeBrowserPage(),
+  baseUrl: "http://127.0.0.1:8090/play"
+});
+browserAggregateTrialAdapter.runAgentTrial = async () => {
+  browserAggregateAgentTrialCalls += 1;
+  throw new Error("browser agent trial should not run");
+};
+const browserAggregateWithAgentTrial = await runAdapterConformance(browserAggregateTrialAdapter);
+assert.equal(browserAggregateWithAgentTrial.every((result) => result.passed), true);
+assert.equal(browserAggregateAgentTrialCalls, 0);
+
+const browserPlayPage = createFakeBrowserPage();
+const browserPlayAdapter = new BrowserIocalcAdapter({
+  page: browserPlayPage,
+  baseUrl: "http://127.0.0.1:8090/play"
+});
+const browserPlayConformance = await runBrowserPlayConformance(browserPlayAdapter);
+assert.equal(browserPlayConformance.every((result) => result.passed), true);
+assert.equal(browserPlayConformance.some((result) => result.name === "browser-wallet-out-of-scope"), true);
+assert.equal(browserPlayPage.fills[0].value, "repair wall and gather wood");
+assert.equal(browserPlayPage.clicks.filter((selector) => selector === BROWSER_IOCALC_SELECTORS.resolveSeason).length, 1);
+assert.equal(browserPlayPage.locatorCalls.some((selector) => /wallet|feedback|recommend/i.test(selector)), false);
+
+const missingBrowserRawConformance = await runBrowserPlayConformance({
+  transport: "browser",
+  async getCapabilities() {
+    return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: false };
+  },
+  async getState() {
+    return { mode: "season_duel", season: 0 };
+  },
+  async submitCommand(input) {
+    return { accepted: true, command: input.command };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "Season 1" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  missingBrowserRawConformance.some((result) => result.name === "browser-wallet-out-of-scope" && result.passed === false),
+  true
+);
+const emptyBrowserSelectorConformance = await runBrowserPlayConformance({
+  transport: "browser",
+  async getCapabilities() {
+    return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: false };
+  },
+  async getState() {
+    return {
+      mode: "season_duel",
+      season: 0,
+      raw: {
+        walletActionsEnabled: false,
+        feedbackCanMutateGameplay: false,
+        externalUrlFetchEnabled: false,
+        codeExecutionEnabled: false,
+        secretsAccessEnabled: false,
+        productionMutationEnabled: false,
+        selectors: {}
+      }
+    };
+  },
+  async submitCommand(input) {
+    return { accepted: true, command: input.command };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "Season 1" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  emptyBrowserSelectorConformance.some((result) => result.name === "browser-wallet-out-of-scope" && result.passed === false),
+  true
+);
+const walletNamedBrowserSelectorConformance = await runBrowserPlayConformance({
+  transport: "browser",
+  async getCapabilities() {
+    return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: false };
+  },
+  async getState() {
+    return {
+      mode: "season_duel",
+      season: 0,
+      raw: {
+        walletActionsEnabled: false,
+        feedbackCanMutateGameplay: false,
+        externalUrlFetchEnabled: false,
+        codeExecutionEnabled: false,
+        secretsAccessEnabled: false,
+        productionMutationEnabled: false,
+        selectors: {
+          wallet: BROWSER_IOCALC_SELECTORS.seasonCommand
+        }
+      }
+    };
+  },
+  async submitCommand(input) {
+    return { accepted: true, command: input.command };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "Season 1" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(
+  walletNamedBrowserSelectorConformance.some((result) => result.name === "browser-wallet-out-of-scope" && result.passed === false),
+  true
+);
+let browserSelectorGetterReadCount = 0;
+const getterBrowserRawConformance = await runBrowserPlayConformance({
+  transport: "browser",
+  async getCapabilities() {
+    return { ...DEFAULT_SAFE_CAPABILITIES, canRunAgentTrial: false };
+  },
+  async getState() {
+    const selectors = {};
+    Object.defineProperty(selectors, "wallet", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        browserSelectorGetterReadCount += 1;
+        return '[data-testid="wallet"]';
+      }
+    });
+    return {
+      mode: "season_duel",
+      season: 0,
+      raw: {
+        walletActionsEnabled: false,
+        feedbackCanMutateGameplay: false,
+        externalUrlFetchEnabled: false,
+        codeExecutionEnabled: false,
+        secretsAccessEnabled: false,
+        productionMutationEnabled: false,
+        selectors
+      }
+    };
+  },
+  async submitCommand(input) {
+    return { accepted: true, command: input.command };
+  },
+  async resolveSeason() {
+    return { resolved: true, season: 1 };
+  },
+  async getReport() {
+    return { text: "Season 1" };
+  },
+  async getLog() {
+    return { entries: [] };
+  },
+  async getMatchHistory() {
+    return { matches: [] };
+  }
+});
+assert.equal(browserSelectorGetterReadCount, 0);
+assert.equal(
+  getterBrowserRawConformance.some((result) => result.name === "browser-wallet-out-of-scope" && result.passed === false),
+  true
+);
+const unsafeBrowserMessageConformance = await runBrowserPlayConformance({
+  transport: "browser",
+  async getCapabilities() {
+    throw new Error("api_key_secret https://wallet.invalid");
+  },
+  async getState() {
+    return { mode: "season_duel", season: 0 };
+  },
+  async submitCommand() {
+    return {
+      accepted: false,
+      command: "repair wall",
+      rejectedReason: "api_key_secret https://wallet.invalid"
+    };
+  },
+  async resolveSeason() {
+    throw new Error("private_key wallet leak");
+  },
+  async getReport() {
+    throw new Error("secret report leak");
+  },
+  async getLog() {
+    throw new Error("wallet log leak");
+  },
+  async getMatchHistory() {
+    throw new Error("token history leak");
+  }
+});
+const unsafeBrowserMessages = unsafeBrowserMessageConformance.map((result) => result.message ?? "").join("\n");
+assert.equal(/api_key|private_key|https:\/\/|wallet\.invalid|token history/i.test(unsafeBrowserMessages), false);
+assert.equal(unsafeBrowserMessages.includes("Browser conformance operation failed."), true);
+assert.equal(unsafeBrowserMessages.includes("Browser command was rejected."), true);
 
 const factoryBrowserPage = createFakeBrowserPage();
 const factoryBrowserAdapter = createIocalcAdapter({
