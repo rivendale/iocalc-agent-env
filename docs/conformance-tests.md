@@ -22,6 +22,9 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
   IOCALC sandbox tool list, closed input schemas, rejection of unsafe probes,
   and non-reflection of URL/key-like/wallet-like caller-controlled text in
   error results.
+- Agent governance ledgers can run `runAgentGovernanceLedgerConformance()` to
+  verify sandbox-only policy, safe boundaries, non-reflection of unsafe probe
+  text, and evidence-chain continuity.
 
 ## Future checks
 
@@ -37,6 +40,10 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
 - Agent identity records can describe canonical IDs, controller types,
   sandbox-only capability scope, timeout/fallback events, and review notes
   without granting account, wallet, production, or third-party authority.
+- Agent governance ledgers can describe local sessions, tool calls, failure
+  states, contamination signals, risk bands, conformance results, and
+  adversarial reviews without granting identity, account, wallet, production,
+  feedback trust, or financial authority.
 
 ## HTTP example runner
 

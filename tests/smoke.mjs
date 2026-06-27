@@ -3,16 +3,21 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import {
   DEFAULT_SAFE_CAPABILITIES,
+  DEFAULT_AGENT_GOVERNANCE_POLICY,
   IOCALC_FORBIDDEN_CAPABILITIES,
   IOCALC_SAFE_GAME_THEORY_PATTERNS,
+  assertAgentGovernanceLedger,
   assertSafeCapabilities,
   assertSandboxGameApiManifest,
   assertSandboxBoundaryDecision,
+  makeAgentGovernanceEntryEvidence,
+  makeIocalcGovernanceDigest,
   makeSandboxBoundaryDecision,
   normalizeGameCommand
 } from "../packages/protocol/dist/index.js";
 import {
   runAgentTrialConformance,
+  runAgentGovernanceLedgerConformance,
   runAdapterConformance,
   runBrowserPlayConformance,
   runManifestConformance,
@@ -2424,6 +2429,462 @@ assert.equal(freshBoundary.blockedCapabilities.includes("walletActionsEnabled"),
 assert.throws(
   () => assertSandboxBoundaryDecision({ ...freshBoundary, action: "approve_wallet_transaction" }),
   /Unsafe boundary action/
+);
+
+const governanceBoundary = makeSandboxBoundaryDecision("read_state", "Read sandbox state for local conformance.");
+const governanceEntryA = {
+  sequence: 1,
+  id: "agl-entry-0001",
+  at: "2026-06-27T00:00:01Z",
+  eventType: "session-started",
+  sessionId: "gov-run-0001",
+  actor: {
+    canonicalAgentId: "iocalc-guide-0001",
+    displayName: "IOCALC Guide 001",
+    controllerType: "advisor-fallback",
+    commandSource: "fallback"
+  },
+  transport: "local-core",
+  sandboxId: "governance-smoke",
+  action: "read_state",
+  summary: "Local sandbox state was read for governance smoke.",
+  verdict: "allow",
+  verdictWeight: 1,
+  boundary: governanceBoundary,
+  riskBand: {
+    method: "deterministic-estimate",
+    samples: 1,
+    p05: 0,
+    p50: 0,
+    p95: 0,
+    metric: "scope_delta",
+    notes: "No scope change expected."
+  },
+  metadata: { season: 1, check: "smoke" }
+};
+const governanceEvidenceA = makeAgentGovernanceEntryEvidence(governanceEntryA);
+const governanceEntryB = {
+  sequence: 2,
+  id: "agl-entry-0002",
+  at: "2026-06-27T00:00:02Z",
+  eventType: "failure-state",
+  sessionId: "gov-run-0001",
+  actor: {
+    canonicalAgentId: "iocalc-guide-0001",
+    displayName: "IOCALC Guide 001",
+    controllerType: "advisor-fallback",
+    commandSource: "fallback"
+  },
+  transport: "local-core",
+  sandboxId: "governance-smoke",
+  action: "failure_state",
+  summary: "Local verifier selected a narrower route.",
+  verdict: "review",
+  verdictWeight: 0.75,
+  boundary: governanceBoundary,
+  failureState: {
+    kind: "query-evidence-mismatch",
+    route: "focus",
+    confidence: 0.75,
+    notes: "Command needed narrower evidence."
+  },
+  contamination: {
+    sourceSessionId: "gov-run-0001",
+    sourceAgentId: "iocalc-guide-0001",
+    topologyHop: 0,
+    signal: "none",
+    quarantineRecommended: false,
+    notes: "No cross agent drift observed."
+  },
+  metadata: { route: "focus", check: "smoke" }
+};
+const governanceEvidenceB = makeAgentGovernanceEntryEvidence(governanceEntryB, governanceEvidenceA.entryDigest);
+const sampleGovernanceLedger = {
+  schemaVersion: "iocalc-agent-governance-v1",
+  project: "IOCALC",
+  ledgerId: "ledger-local-0001",
+  generatedAt: "2026-06-27T00:00:00Z",
+  policy: DEFAULT_AGENT_GOVERNANCE_POLICY,
+  sessions: [
+    {
+      sessionId: "gov-run-0001",
+      canonicalAgentId: "iocalc-guide-0001",
+      displayName: "IOCALC Guide 001",
+      controllerType: "advisor-fallback",
+      commandSource: "fallback",
+      transport: "local-core",
+      sandboxId: "governance-smoke",
+      owner: "local-test",
+      status: "active",
+      startedAt: "2026-06-27T00:00:00Z",
+      expiresAt: "2026-06-28T00:00:00Z",
+      capabilityScope: ["canReadState", "canSubmitGameCommand", "canReadReport"],
+      blockedCapabilities: [...IOCALC_FORBIDDEN_CAPABILITIES],
+      policy: DEFAULT_AGENT_GOVERNANCE_POLICY
+    }
+  ],
+  entries: [
+    {
+      ...governanceEntryA,
+      evidence: governanceEvidenceA
+    },
+    {
+      ...governanceEntryB,
+      evidence: governanceEvidenceB
+    }
+  ],
+  latestDigest: governanceEvidenceB.entryDigest
+};
+assertAgentGovernanceLedger(sampleGovernanceLedger);
+assert.equal(makeIocalcGovernanceDigest({ b: 2, a: 1 }), makeIocalcGovernanceDigest({ a: 1, b: 2 }));
+assert.deepEqual(
+  runAgentGovernanceLedgerConformance(sampleGovernanceLedger).filter((result) => !result.passed),
+  []
+);
+const brokenGovernanceLedger = {
+  ...sampleGovernanceLedger,
+  entries: [
+    sampleGovernanceLedger.entries[0],
+    {
+      ...sampleGovernanceLedger.entries[1],
+      evidence: {
+        ...sampleGovernanceLedger.entries[1].evidence,
+        previousDigest: "fnv1a64:0000000000000000",
+        entryDigest: makeIocalcGovernanceDigest({
+          previousDigest: "fnv1a64:0000000000000000",
+          payloadDigest: sampleGovernanceLedger.entries[1].evidence.payloadDigest,
+          canonicalization: "iocalc-stable-json-v1",
+          digestAlgorithm: "fnv1a64-noncryptographic"
+        })
+      }
+    }
+  ]
+};
+assert.throws(() => assertAgentGovernanceLedger(brokenGovernanceLedger), /digest chain/);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      latestDigest: undefined
+    }),
+  /latest digest/
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        {
+          ...sampleGovernanceLedger.entries[0],
+          evidence: {
+            ...sampleGovernanceLedger.entries[0].evidence,
+            payloadDigest: "fnv1a64:0000000000000000",
+            entryDigest: makeIocalcGovernanceDigest({
+              payloadDigest: "fnv1a64:0000000000000000",
+              canonicalization: "iocalc-stable-json-v1",
+              digestAlgorithm: "fnv1a64-noncryptographic"
+            })
+          }
+        }
+      ],
+      latestDigest: makeIocalcGovernanceDigest({
+        payloadDigest: "fnv1a64:0000000000000000",
+        canonicalization: "iocalc-stable-json-v1",
+        digestAlgorithm: "fnv1a64-noncryptographic"
+      })
+    }),
+  /payload digest/
+);
+const unsafeGovernanceLedger = {
+  ...sampleGovernanceLedger,
+  entries: [
+    {
+      ...sampleGovernanceLedger.entries[0],
+      summary: "api_key hunter2"
+    }
+  ],
+  latestDigest: sampleGovernanceLedger.entries[0].evidence.entryDigest
+};
+assert.equal(runAgentGovernanceLedgerConformance(unsafeGovernanceLedger)[0].passed, false);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        {
+          ...sampleGovernanceLedger.entries[0],
+          summary: "open ftp://example.invalid"
+        }
+      ],
+      latestDigest: sampleGovernanceLedger.entries[0].evidence.entryDigest
+    }),
+  /unsafe text/
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        {
+          ...sampleGovernanceLedger.entries[0],
+          unexpectedAuthority: true
+        }
+      ],
+      latestDigest: sampleGovernanceLedger.entries[0].evidence.entryDigest
+    }),
+  /unsupported key/
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        {
+          ...sampleGovernanceLedger.entries[0],
+          summary: "wallet approval requested"
+        }
+      ],
+      latestDigest: sampleGovernanceLedger.entries[0].evidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeSchemeGovernanceEntry = {
+  ...governanceEntryA,
+  summary: "open ssh:host"
+};
+const unsafeSchemeEvidence = makeAgentGovernanceEntryEvidence(unsafeSchemeGovernanceEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeSchemeGovernanceEntry, evidence: unsafeSchemeEvidence }],
+      latestDigest: unsafeSchemeEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      ledgerId: "walletAuthority"
+    }),
+  /unsafe text/
+);
+const unsafeIdGovernanceEntry = {
+  ...governanceEntryA,
+  id: "ssh:host"
+};
+const unsafeIdEvidence = makeAgentGovernanceEntryEvidence(unsafeIdGovernanceEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeIdGovernanceEntry, evidence: unsafeIdEvidence }],
+      latestDigest: unsafeIdEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      sessions: [
+        {
+          ...sampleGovernanceLedger.sessions[0],
+          canonicalAgentId: "iocalc-wallet-lab-0001"
+        }
+      ]
+    }),
+  /canonical agent ID/
+);
+const unsafeWalletActorEntry = {
+  ...governanceEntryA,
+  actor: {
+    ...governanceEntryA.actor,
+    canonicalAgentId: "iocalc-wallet-lab-0001"
+  }
+};
+const unsafeWalletActorEvidence = makeAgentGovernanceEntryEvidence(unsafeWalletActorEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeWalletActorEntry, evidence: unsafeWalletActorEvidence }],
+      latestDigest: unsafeWalletActorEvidence.entryDigest
+    }),
+  /canonical agent ID/
+);
+const unsafeContaminationSourceEntry = {
+  ...governanceEntryB,
+  contamination: {
+    ...governanceEntryB.contamination,
+    sourceAgentId: "iocalc-wallet-lab-0001"
+  }
+};
+const unsafeContaminationSourceEvidence = makeAgentGovernanceEntryEvidence(
+  unsafeContaminationSourceEntry,
+  governanceEvidenceA.entryDigest
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        { ...governanceEntryA, evidence: governanceEvidenceA },
+        { ...unsafeContaminationSourceEntry, evidence: unsafeContaminationSourceEvidence }
+      ],
+      latestDigest: unsafeContaminationSourceEvidence.entryDigest
+    }),
+  /canonical agent ID/
+);
+const unsafeAuthorizationTextEntry = {
+  ...governanceEntryA,
+  summary: "authorization granted"
+};
+const unsafeAuthorizationTextEvidence = makeAgentGovernanceEntryEvidence(unsafeAuthorizationTextEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeAuthorizationTextEntry, evidence: unsafeAuthorizationTextEvidence }],
+      latestDigest: unsafeAuthorizationTextEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeAuthGrantMetadataEntry = {
+  ...governanceEntryA,
+  metadata: { authGrant: true }
+};
+const unsafeAuthGrantMetadataEvidence = makeAgentGovernanceEntryEvidence(unsafeAuthGrantMetadataEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeAuthGrantMetadataEntry, evidence: unsafeAuthGrantMetadataEvidence }],
+      latestDigest: unsafeAuthGrantMetadataEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeActionGovernanceEntry = {
+  ...governanceEntryA,
+  action: "approve_wallet_transaction"
+};
+const unsafeActionEvidence = makeAgentGovernanceEntryEvidence(unsafeActionGovernanceEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeActionGovernanceEntry, evidence: unsafeActionEvidence }],
+      latestDigest: unsafeActionEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeBoundaryGovernanceEntry = {
+  ...governanceEntryA,
+  boundary: {
+    ...governanceBoundary,
+    productionAuthority: true
+  }
+};
+const unsafeBoundaryEvidence = makeAgentGovernanceEntryEvidence(unsafeBoundaryGovernanceEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeBoundaryGovernanceEntry, evidence: unsafeBoundaryEvidence }],
+      latestDigest: unsafeBoundaryEvidence.entryDigest
+    }),
+  /unsupported key/
+);
+const unsafeBoundaryReasonEntry = {
+  ...governanceEntryA,
+  boundary: {
+    ...governanceBoundary,
+    reason: "wallet_authority granted"
+  }
+};
+const unsafeBoundaryReasonEvidence = makeAgentGovernanceEntryEvidence(unsafeBoundaryReasonEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeBoundaryReasonEntry, evidence: unsafeBoundaryReasonEvidence }],
+      latestDigest: unsafeBoundaryReasonEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeMetadataKeyEntry = {
+  ...governanceEntryA,
+  metadata: { walletAuthority: true }
+};
+const unsafeMetadataKeyEvidence = makeAgentGovernanceEntryEvidence(unsafeMetadataKeyEntry);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [{ ...unsafeMetadataKeyEntry, evidence: unsafeMetadataKeyEvidence }],
+      latestDigest: unsafeMetadataKeyEvidence.entryDigest
+    }),
+  /unsafe text/
+);
+const unsafeContaminationFlagEntry = {
+  ...governanceEntryB,
+  contamination: {
+    ...governanceEntryB.contamination,
+    quarantineRecommended: "wallet_authority"
+  }
+};
+const unsafeContaminationFlagEvidence = makeAgentGovernanceEntryEvidence(
+  unsafeContaminationFlagEntry,
+  governanceEvidenceA.entryDigest
+);
+assert.throws(
+  () =>
+    assertAgentGovernanceLedger({
+      ...sampleGovernanceLedger,
+      entries: [
+        { ...governanceEntryA, evidence: governanceEvidenceA },
+        { ...unsafeContaminationFlagEntry, evidence: unsafeContaminationFlagEvidence }
+      ],
+      latestDigest: unsafeContaminationFlagEvidence.entryDigest
+    }),
+  /quarantine flag/
+);
+const arrayExtraGovernanceLedger = {
+  ...sampleGovernanceLedger,
+  sessions: [...sampleGovernanceLedger.sessions]
+};
+Object.defineProperty(arrayExtraGovernanceLedger.sessions, "walletAuthority", {
+  enumerable: true,
+  value: true
+});
+assert.throws(() => assertAgentGovernanceLedger(arrayExtraGovernanceLedger), /array key/);
+const nonEnumerableEntryLedger = {
+  ...sampleGovernanceLedger,
+  entries: [
+    {
+      ...governanceEntryA,
+      evidence: governanceEvidenceA
+    }
+  ],
+  latestDigest: governanceEvidenceA.entryDigest
+};
+Object.defineProperty(nonEnumerableEntryLedger.entries[0], "summary", {
+  enumerable: false,
+  value: governanceEntryA.summary
+});
+assert.throws(() => assertAgentGovernanceLedger(nonEnumerableEntryLedger), /non-enumerable/);
+assert.throws(
+  () =>
+    makeIocalcGovernanceDigest(
+      Object.defineProperty({}, "unsafe", {
+        enumerable: true,
+        get() {
+          throw new Error("accessor should not run");
+        }
+      })
+    ),
+  /accessor/
 );
 
 const unsafeAuditAdapter = {
