@@ -53,6 +53,14 @@ trials.
 Tool results are canonical sanitized shapes. The bridge does not return adapter
 `raw` payloads, permission-like fields, wallet/account/session fields, secret
 fields, production/deployment fields, or arbitrary extra authority metadata.
+Unknown tools and unexpected argument fields return generic MCP error results
+instead of reflecting caller-controlled text.
+
+Use `runIocalcMcpToolBridgeConformance(bridge)` to check an MCP bridge for the
+fixed sandbox tool list, closed input schemas, unsafe tool rejection, and
+non-reflection of URL, wallet-like, or key-like probe strings in error output.
+The helper calls only MCP tool methods and does not grant any additional
+adapter, wallet, account, feedback, deployment, or production authority.
 
 The HTTP bridge factory accepts only localhost/127.0.0.1/[::1] roots for local
 development or HTTPS `iocalc.com` / `play.iocalc.com` roots. It rejects

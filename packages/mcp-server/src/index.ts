@@ -22,6 +22,8 @@ import {
   type SubmitCommandResult
 } from "@iocalc/protocol";
 
+export * from "./conformance.js";
+
 export interface IocalcMcpToolSpec {
   name: IocalcMcpToolName;
   description: string;
@@ -271,7 +273,7 @@ export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcM
     tools: IOCALC_MCP_TOOLS,
     async callTool(name: IocalcMcpToolName | string, args?: unknown): Promise<IocalcMcpToolResult> {
       if (!TOOL_NAMES.has(name)) {
-        return errorResult(`Unknown IOCALC MCP tool: ${name}`);
+        return errorResult("Unknown IOCALC MCP tool.");
       }
 
       try {
@@ -332,7 +334,7 @@ export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcM
            * through to an adapter method.
            */
           default:
-            return errorResult(`Unknown IOCALC MCP tool: ${name}`);
+            return errorResult("Unknown IOCALC MCP tool.");
         }
       } catch (error) {
         return errorResult(safeErrorMessage(error));
@@ -660,15 +662,16 @@ function okResult(payload: unknown): IocalcMcpToolResult {
 }
 
 function errorResult(message: string): IocalcMcpToolResult {
+  const safeMessage = sanitizeVisibleText(message, 400) ?? "MCP tool request was rejected inside the sandbox boundary.";
   return {
     isError: true,
     content: [
       {
         type: "text",
-        text: message
+        text: safeMessage
       }
     ],
-    structuredContent: { error: message }
+    structuredContent: { error: safeMessage }
   };
 }
 
@@ -851,7 +854,7 @@ function assertAllowedFields(record: Record<string, unknown>, fields: string[]):
   const allowed = new Set(fields);
   for (const field of Object.keys(record)) {
     if (!allowed.has(field)) {
-      throw new Error(`Unexpected MCP tool argument: ${field}.`);
+      throw new Error("Unexpected MCP tool argument.");
     }
   }
 }

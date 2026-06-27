@@ -22,7 +22,8 @@ import {
 import {
   IOCALC_MCP_TOOLS,
   createIocalcHttpMcpToolBridge,
-  createIocalcMcpToolBridge
+  createIocalcMcpToolBridge,
+  runIocalcMcpToolBridgeConformance
 } from "../packages/mcp-server/dist/index.js";
 import {
   BROWSER_IOCALC_SELECTORS,
@@ -2141,6 +2142,23 @@ assert.equal(mcpUnsafeBoundaryManifest.content[0].text.includes("api.key"), fals
 
 const unknownMcpTool = await mcpBridge.callTool("iocalc.approve_wallet_transaction");
 assert.equal(unknownMcpTool.isError, true);
+assert.equal(unknownMcpTool.content[0].text.includes("approve_wallet"), false);
+assert.equal(unknownMcpTool.content[0].text.includes("wallet_transaction"), false);
+
+const mcpUnsafeExtraArg = await mcpBridge.callTool("iocalc.get_state", {
+  api_key_secret: "hunter2",
+  walletUrl: "https://wallet.invalid"
+});
+assert.equal(mcpUnsafeExtraArg.isError, true);
+assert.equal(mcpUnsafeExtraArg.content[0].text.includes("api_key_secret"), false);
+assert.equal(mcpUnsafeExtraArg.content[0].text.includes("hunter2"), false);
+assert.equal(mcpUnsafeExtraArg.content[0].text.includes("wallet.invalid"), false);
+
+const mcpBridgeConformance = await runIocalcMcpToolBridgeConformance(mcpBridge);
+assert.deepEqual(
+  mcpBridgeConformance.filter((result) => !result.passed),
+  []
+);
 
 const mcpOriginalFetch = globalThis.fetch;
 const mcpHttpRequests = [];
