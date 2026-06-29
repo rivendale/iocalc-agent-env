@@ -154,4 +154,4 @@ Forbidden:
 
 ## Status
 
-Initial scaffold. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, and opt-in MCP stdio wrapper are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.
+Current open-source foundation. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, opt-in MCP stdio wrapper, manifest response checks, and agent governance ledger helpers are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.
