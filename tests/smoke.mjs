@@ -2301,6 +2301,60 @@ assert.equal(noisyTrial.structuredContent.transcript.events[0].type, "error");
 assert.equal(noisyTrial.structuredContent.transcript.events[0].data.secret, undefined);
 assert.equal(noisyTrial.structuredContent.serverTriadBracket, undefined);
 
+const taintedBracket = JSON.parse(JSON.stringify(sampleServerTriadBracket()));
+taintedBracket.safetyBoundary = {
+  sandboxOnly: false,
+  submittedTextIsExecuted: true,
+  walletActionsEnabled: true,
+  feedbackCanMutateGameplay: true,
+  externalUrlFetchEnabled: true,
+  codeExecutionEnabled: true,
+  secretsAccessEnabled: true,
+  productionMutationEnabled: true,
+  financialFunctionalityEnabled: true
+};
+taintedBracket.serverMetricPolicy = "wallet feedback trust fetch url payment payout execute production";
+taintedBracket.summary = "wallet feedback trust fetch url payment payout";
+taintedBracket.standings[0].stableMetrics.matchupSummary = "wallet feedback trust fetch url payment payout";
+taintedBracket.matches[0].leftTopCommand = "wallet feedback trust fetch url payment payout";
+taintedBracket.matches[0].summary = "wallet feedback trust fetch url payment payout";
+const taintedTrial = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async runAgentTrial() {
+    return {
+      winner: "iocalc-agent-0001",
+      scorecard: { score: 1 },
+      transcript: { transport: "mcp", startedAt: "2026-06-26T00:00:00Z", events: [] },
+      serverTriadBracket: taintedBracket
+    };
+  }
+}).callTool("iocalc.run_agent_trial", {
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+const sanitizedTaintedBracket = taintedTrial.structuredContent.serverTriadBracket;
+assert.equal(sanitizedTaintedBracket.safetyBoundary.sandboxOnly, true);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.submittedTextIsExecuted, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.walletActionsEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.feedbackCanMutateGameplay, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.externalUrlFetchEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.codeExecutionEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.secretsAccessEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.productionMutationEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.financialFunctionalityEnabled, false);
+const sanitizedTaintedText = [
+  sanitizedTaintedBracket.serverMetricPolicy,
+  sanitizedTaintedBracket.summary,
+  sanitizedTaintedBracket.standings[0].stableMetrics.matchupSummary,
+  sanitizedTaintedBracket.matches[0].leftTopCommand,
+  sanitizedTaintedBracket.matches[0].summary
+].join(" ").toLowerCase();
+for (const unsafeTerm of ["wallet", "feedback", "trust", "fetch", "url", "payment", "payout", "execute", "production"]) {
+  assert.equal(sanitizedTaintedText.includes(unsafeTerm), false, `tainted triad text leaked ${unsafeTerm}`);
+}
+assert.equal(sanitizedTaintedText.includes("[redacted]"), true);
+
 const mcpUnsupportedTrial = await createIocalcMcpToolBridge({
   ...fakeMcpAdapter,
   runAgentTrial: undefined

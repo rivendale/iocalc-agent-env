@@ -226,7 +226,7 @@ const COMMAND_SOURCES = new Set(["human", "ai", "fallback", "scripted", "manual"
 const TRANSPORTS = new Set(["manual", "browser", "http", "mcp", "local-core"]);
 const TRANSCRIPT_EVENT_TYPES = new Set(["state", "command", "resolution", "report", "log", "error"]);
 const FORBIDDEN_MCP_TEXT =
-  /\b(?:accounts?|api[_ -]?key|auth|bearer|broker|coinbase|contracts?|cookies?|crypto|deploy|deployment|eval|execute|financial|login|mnemonic|oauth|password|private[_ -]?key|production|secrets?|seed phrase|sessions?|shell|sudo|tokens?|transactions?|transfers?|wallets?|withdraw(?:al)?)\b/i;
+  /\b(?:accounts?|api[_ -]?key|auth|bearer|broker|coinbase|contracts?|cookies?|crypto|deploy|deployment|eval|execute|feedback|fetch|financial|login|mnemonic|oauth|password|payments?|payouts?|private[_ -]?key|production|secrets?|seed phrase|sessions?|shell|sudo|tokens?|transactions?|transfers?|trust|urls?|wallets?|withdraw(?:al)?)\b/i;
 const FORBIDDEN_MCP_TEXT_GLOBAL = new RegExp(FORBIDDEN_MCP_TEXT.source, "gi");
 const SENSITIVE_RESULT_KEY =
   /(?:account|api.*key|auth|bearer|cookie|credential|deploy|feedback|fetch|financial|key|login|mnemonic|oauth|password|permission|private|production|secret|session|token|transaction|trust|url|wallet|withdraw)/i;
@@ -299,17 +299,17 @@ const SERVER_TRIAD_POLICY_KINDS = new Set([
 const STABLE_METRIC_SOURCES = new Set(["browser-local-sandbox", "server-local-sandbox"]);
 const STABLE_COMPLETION_KINDS = new Set(["building-level-ups", "score-delta-proxy"]);
 const STABLE_POLICY_STATES = new Set(["stable", "watch", "unstable"]);
-const SERVER_TRIAD_SAFETY_KEYS = [
-  "sandboxOnly",
-  "submittedTextIsExecuted",
-  "walletActionsEnabled",
-  "feedbackCanMutateGameplay",
-  "externalUrlFetchEnabled",
-  "codeExecutionEnabled",
-  "secretsAccessEnabled",
-  "productionMutationEnabled",
-  "financialFunctionalityEnabled"
-];
+const SERVER_TRIAD_SAFE_BOUNDARY = Object.freeze({
+  sandboxOnly: true,
+  submittedTextIsExecuted: false,
+  walletActionsEnabled: false,
+  feedbackCanMutateGameplay: false,
+  externalUrlFetchEnabled: false,
+  codeExecutionEnabled: false,
+  secretsAccessEnabled: false,
+  productionMutationEnabled: false,
+  financialFunctionalityEnabled: false
+});
 
 export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcMcpToolBridge {
   return {
@@ -802,14 +802,6 @@ function sanitizeServerTriadBracket(value: unknown): Record<string, unknown> | u
   const metricSemantics = record.metricSemantics && typeof record.metricSemantics === "object" && !Array.isArray(record.metricSemantics)
     ? (record.metricSemantics as Record<string, unknown>)
     : {};
-  const safetyBoundary = record.safetyBoundary && typeof record.safetyBoundary === "object" && !Array.isArray(record.safetyBoundary)
-    ? (record.safetyBoundary as Record<string, unknown>)
-    : {};
-  const safeBoundary = Object.fromEntries(
-    SERVER_TRIAD_SAFETY_KEYS
-      .filter((key) => typeof safetyBoundary[key] === "boolean")
-      .map((key) => [key, Boolean(safetyBoundary[key])])
-  );
   return dropUndefined({
     schemaVersion: "iocalc-server-triad-bracket-v1",
     source: "server-local-sandbox",
@@ -841,7 +833,7 @@ function sanitizeServerTriadBracket(value: unknown): Record<string, unknown> | u
       ? record.matches.map((match) => sanitizeServerTriadMatch(match)).filter((match): match is Record<string, unknown> => Boolean(match))
       : undefined,
     summary: sanitizeVisibleText(record.summary, 420),
-    safetyBoundary: Object.keys(safeBoundary).length > 0 ? safeBoundary : undefined
+    safetyBoundary: { ...SERVER_TRIAD_SAFE_BOUNDARY }
   });
 }
 
