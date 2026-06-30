@@ -95,6 +95,7 @@ export async function runIocalcMcpToolBridgeConformance(
       seasons: 1
     })
   );
+  results.push(await checkAgentTrialStableMetrics(bridge));
   return results;
 }
 
@@ -156,6 +157,56 @@ async function checkUnsafeCallRejected(
     };
   }
   return { name, passed: true };
+}
+
+async function checkAgentTrialStableMetrics(
+  bridge: IocalcMcpConformanceBridge
+): Promise<IocalcMcpBridgeConformanceResult> {
+  let result: IocalcMcpConformanceToolResult;
+  try {
+    result = await bridge.callTool("iocalc.run_agent_trial", {
+      agentA: "iocalc-agent-0001",
+      agentB: "iocalc-runner-0001",
+      seasons: 1,
+      seed: "mcp-conformance"
+    });
+  } catch {
+    return {
+      name: "mcp-run-agent-trial-stable-metrics",
+      passed: false,
+      message: "run_agent_trial must return a safe result instead of throwing."
+    };
+  }
+  if (result.isError === true) {
+    return {
+      name: "mcp-run-agent-trial-stable-metrics",
+      passed: false,
+      message: "run_agent_trial returned an MCP error result."
+    };
+  }
+  const payload = result.structuredContent as Record<string, unknown> | undefined;
+  const bracket = payload?.serverTriadBracket as Record<string, unknown> | undefined;
+  const standings = bracket?.standings as Array<Record<string, unknown>> | undefined;
+  const matches = bracket?.matches as Array<Record<string, unknown>> | undefined;
+  const stableMetricKeys = bracket?.stableMetricKeys as string[] | undefined;
+  const firstStandingMetrics = standings?.[0]?.stableMetrics as Record<string, unknown> | undefined;
+  const firstMatchMetrics = matches?.[0]?.stableMetrics as Record<string, unknown> | undefined;
+  const firstMatchLeft = firstMatchMetrics?.left as Record<string, unknown> | undefined;
+  if (
+    bracket?.schemaVersion !== "iocalc-server-triad-bracket-v1" ||
+    !stableMetricKeys?.includes("completionTempo") ||
+    firstStandingMetrics?.metricVersion !== "iocalc-stable-matchup-metrics-v1" ||
+    firstStandingMetrics?.completionMetricKind !== "score-delta-proxy" ||
+    typeof firstStandingMetrics?.completionTempo !== "number" ||
+    firstMatchLeft?.metricVersion !== "iocalc-stable-matchup-metrics-v1"
+  ) {
+    return {
+      name: "mcp-run-agent-trial-stable-metrics",
+      passed: false,
+      message: "run_agent_trial must expose sanitized serverTriadBracket stableMetrics."
+    };
+  }
+  return { name: "mcp-run-agent-trial-stable-metrics", passed: true };
 }
 
 function containsUnsafeEcho(result: IocalcMcpConformanceToolResult): boolean {
