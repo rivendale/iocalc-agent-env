@@ -796,6 +796,137 @@ const mcpGovernanceLedger = {
 };
 assertAgentGovernanceLedger(mcpGovernanceLedger);
 
+function sampleServerTriadBracket() {
+  const leftStableMetrics = {
+    metricVersion: "iocalc-stable-matchup-metrics-v1",
+    source: "server-local-sandbox",
+    completionMetricKind: "score-delta-proxy",
+    scoreMargin: 12,
+    completionTempo: 0.5,
+    completionCount: 4,
+    repeatRate: 0.13,
+    energyShortfall: 0,
+    damageLeak: 2,
+    fallbackCount: 0,
+    policyStability: "stable",
+    matchupSummary: "Compounder Agent: margin +12, tempo 0.5, repeats 0.13, shortfall 0, damage leak +2, stable."
+  };
+  const rightStableMetrics = {
+    ...leftStableMetrics,
+    scoreMargin: -12,
+    completionTempo: 0.38,
+    completionCount: 3,
+    repeatRate: 0.25,
+    policyStability: "watch",
+    matchupSummary: "Compounder Heuristic: margin -12, tempo 0.38, repeats 0.25, shortfall 0, damage leak +2, watch."
+  };
+  return {
+    schemaVersion: "iocalc-server-triad-bracket-v1",
+    source: "server-local-sandbox",
+    seed: "mcp-smoke",
+    seasons: 8,
+    completed: true,
+    generatedAt: "2026-06-30T00:00:00Z",
+    stableMetricKeys: [
+      "scoreMargin",
+      "completionTempo",
+      "completionCount",
+      "repeatRate",
+      "energyShortfall",
+      "damageLeak",
+      "fallbackCount",
+      "policyStability"
+    ],
+    metricSemantics: {
+      metricVersion: "iocalc-stable-matchup-metrics-v1",
+      completionMetricKind: "score-delta-proxy",
+      source: "server-local-sandbox",
+      authority: "server-local-analogue",
+      damageMetricKind: "shared-risk-damage-delta"
+    },
+    serverMetricPolicy: "Server triad uses stableMetrics with a completion proxy from high score-delta seasons.",
+    serverVerified: false,
+    leaderboardEvidence: false,
+    browserParity: "server-local-analogue",
+    policies: [
+      {
+        id: "compounder-agent",
+        label: "Compounder Agent",
+        controller: "compounder-agent",
+        strategyBias: "compounder",
+        canonicalAgentId: "iocalc-agent-0001",
+        policyKind: "server-local-compounder-agent"
+      }
+    ],
+    standings: [
+      {
+        id: "compounder-agent",
+        label: "Compounder Agent",
+        controller: "compounder-agent",
+        strategyBias: "compounder",
+        policyKind: "server-local-compounder-agent",
+        points: 3,
+        wins: 1,
+        draws: 0,
+        losses: 0,
+        scoreFor: 100,
+        scoreAgainst: 88,
+        margin: 12,
+        completionProxy: 4,
+        shortfall: 0,
+        repeatCount: 1,
+        fallbackCount: 0,
+        sharedDamageDelta: 2,
+        stableMetrics: leftStableMetrics
+      }
+    ],
+    matches: [
+      {
+        id: "server-triad-1-compounder-agent-vs-compounder-heuristic",
+        leftId: "compounder-agent",
+        rightId: "compounder-heuristic",
+        leftLabel: "Compounder Agent",
+        rightLabel: "Compounder Heuristic",
+        leftController: "compounder-agent",
+        rightController: "local-heuristic-ai",
+        winner: "compounder-agent",
+        winnerLabel: "Compounder Agent",
+        seasonCount: 8,
+        leftScore: 100,
+        rightScore: 88,
+        leftCompletionProxy: 4,
+        rightCompletionProxy: 3,
+        leftRepeatCount: 1,
+        rightRepeatCount: 2,
+        leftUniqueCommands: 7,
+        rightUniqueCommands: 6,
+        leftTopCommand: "build the forge and trade coin",
+        rightTopCommand: "fortify the wall and trade coin",
+        finalDamage: 12,
+        damageDelta: 2,
+        finalPressure: 41,
+        stableMetrics: {
+          left: leftStableMetrics,
+          right: rightStableMetrics
+        },
+        summary: "Compounder Agent 100 vs Compounder Heuristic 88; completion proxy 4/3; repeats 1/2."
+      }
+    ],
+    summary: "Compounder Agent leads the server-local triad with 3 points.",
+    safetyBoundary: {
+      sandboxOnly: true,
+      submittedTextIsExecuted: false,
+      walletActionsEnabled: false,
+      feedbackCanMutateGameplay: false,
+      externalUrlFetchEnabled: false,
+      codeExecutionEnabled: false,
+      secretsAccessEnabled: false,
+      productionMutationEnabled: false,
+      financialFunctionalityEnabled: false
+    }
+  };
+}
+
 const capturedRequests = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, init = {}) => {
@@ -818,7 +949,12 @@ globalThis.fetch = async (url, init = {}) => {
     "/api/game/governance-ledger": mcpGovernanceLedger
   };
   const payload =
-    payloadByPath[pathname] ?? { sandboxId, scorecard: {}, transcript: { transport: "http", startedAt: "2026-06-26T00:00:00Z", events: [] } };
+    payloadByPath[pathname] ?? {
+      sandboxId,
+      scorecard: {},
+      transcript: { transport: "http", startedAt: "2026-06-26T00:00:00Z", events: [] },
+      serverTriadBracket: sampleServerTriadBracket()
+    };
   return {
     ok: true,
     status: 200,
@@ -838,11 +974,13 @@ await httpAdapter.submitCommand({
   sandboxId: "override-sandbox"
 });
 await httpAdapter.resolveSeason({ seed: "smoke-seed" });
-await httpAdapter.runAgentTrial({
+const httpAgentTrial = await httpAdapter.runAgentTrial({
   agentA: "iocalc-agent-0001",
   agentB: "iocalc-runner-0001",
   seasons: 1
 });
+assert.equal(httpAgentTrial.serverTriadBracket.schemaVersion, "iocalc-server-triad-bracket-v1");
+assert.equal(httpAgentTrial.serverTriadBracket.standings[0].stableMetrics.metricVersion, "iocalc-stable-matchup-metrics-v1");
 const httpGovernanceLedger = await httpAdapter.getGovernanceLedger();
 
 assert.equal(capturedRequests[0].url.includes("sandboxId=smoke-sandbox"), true);
@@ -1884,7 +2022,8 @@ const fakeMcpAdapter = {
     mcpCalls.push(["runAgentTrial", input]);
     return {
       scorecard: { winner: input.agentA },
-      transcript: { transport: "mcp", startedAt: "2026-06-26T00:00:00Z", events: [] }
+      transcript: { transport: "mcp", startedAt: "2026-06-26T00:00:00Z", events: [] },
+      serverTriadBracket: sampleServerTriadBracket()
     };
   }
 };
@@ -2101,6 +2240,12 @@ const mcpTrial = await mcpBridge.callTool("iocalc.run_agent_trial", {
   seasons: 3
 });
 assert.equal(mcpTrial.structuredContent.scorecard.winner, "iocalc-agent-0001");
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.schemaVersion, "iocalc-server-triad-bracket-v1");
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.stableMetricKeys.includes("completionTempo"), true);
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.standings[0].stableMetrics.metricVersion, "iocalc-stable-matchup-metrics-v1");
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.standings[0].stableMetrics.completionMetricKind, "score-delta-proxy");
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.matches[0].stableMetrics.left.completionTempo, 0.5);
+assert.equal(mcpTrial.structuredContent.serverTriadBracket.safetyBoundary.walletActionsEnabled, false);
 
 const mcpGovernance = await mcpBridge.callTool("iocalc.get_governance_ledger");
 assert.equal(mcpGovernance.isError, undefined);
@@ -2135,6 +2280,11 @@ const noisyTrialBridge = createIocalcMcpToolBridge({
         transport: "production-admin",
         startedAt: "2026-06-26T00:00:00Z",
         events: [{ type: "wallet-session", at: "2026-06-26T00:00:00Z", data: { safe: "ok", secret: "do-not-return" } }]
+      },
+      serverTriadBracket: {
+        schemaVersion: "wrong",
+        source: "server-local-sandbox",
+        standings: [{ stableMetrics: { metricVersion: "wrong" } }]
       }
     };
   }
@@ -2149,6 +2299,61 @@ assert.equal(noisyTrial.structuredContent.scorecard.permissions, undefined);
 assert.equal(noisyTrial.structuredContent.transcript.transport, "mcp");
 assert.equal(noisyTrial.structuredContent.transcript.events[0].type, "error");
 assert.equal(noisyTrial.structuredContent.transcript.events[0].data.secret, undefined);
+assert.equal(noisyTrial.structuredContent.serverTriadBracket, undefined);
+
+const taintedBracket = JSON.parse(JSON.stringify(sampleServerTriadBracket()));
+taintedBracket.safetyBoundary = {
+  sandboxOnly: false,
+  submittedTextIsExecuted: true,
+  walletActionsEnabled: true,
+  feedbackCanMutateGameplay: true,
+  externalUrlFetchEnabled: true,
+  codeExecutionEnabled: true,
+  secretsAccessEnabled: true,
+  productionMutationEnabled: true,
+  financialFunctionalityEnabled: true
+};
+taintedBracket.serverMetricPolicy = "wallet feedback trust fetch url payment payout execute production";
+taintedBracket.summary = "wallet feedback trust fetch url payment payout";
+taintedBracket.standings[0].stableMetrics.matchupSummary = "wallet feedback trust fetch url payment payout";
+taintedBracket.matches[0].leftTopCommand = "wallet feedback trust fetch url payment payout";
+taintedBracket.matches[0].summary = "wallet feedback trust fetch url payment payout";
+const taintedTrial = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  async runAgentTrial() {
+    return {
+      winner: "iocalc-agent-0001",
+      scorecard: { score: 1 },
+      transcript: { transport: "mcp", startedAt: "2026-06-26T00:00:00Z", events: [] },
+      serverTriadBracket: taintedBracket
+    };
+  }
+}).callTool("iocalc.run_agent_trial", {
+  agentA: "iocalc-agent-0001",
+  agentB: "iocalc-runner-0001",
+  seasons: 1
+});
+const sanitizedTaintedBracket = taintedTrial.structuredContent.serverTriadBracket;
+assert.equal(sanitizedTaintedBracket.safetyBoundary.sandboxOnly, true);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.submittedTextIsExecuted, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.walletActionsEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.feedbackCanMutateGameplay, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.externalUrlFetchEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.codeExecutionEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.secretsAccessEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.productionMutationEnabled, false);
+assert.equal(sanitizedTaintedBracket.safetyBoundary.financialFunctionalityEnabled, false);
+const sanitizedTaintedText = [
+  sanitizedTaintedBracket.serverMetricPolicy,
+  sanitizedTaintedBracket.summary,
+  sanitizedTaintedBracket.standings[0].stableMetrics.matchupSummary,
+  sanitizedTaintedBracket.matches[0].leftTopCommand,
+  sanitizedTaintedBracket.matches[0].summary
+].join(" ").toLowerCase();
+for (const unsafeTerm of ["wallet", "feedback", "trust", "fetch", "url", "payment", "payout", "execute", "production"]) {
+  assert.equal(sanitizedTaintedText.includes(unsafeTerm), false, `tainted triad text leaked ${unsafeTerm}`);
+}
+assert.equal(sanitizedTaintedText.includes("[redacted]"), true);
 
 const mcpUnsupportedTrial = await createIocalcMcpToolBridge({
   ...fakeMcpAdapter,
@@ -3159,7 +3364,8 @@ async function startLocalMcpSandboxServer() {
       if (request.method === "POST" && requestUrl.pathname === "/api/game/agent-trial") {
         sendJson(response, 200, {
           scorecard: { winner: "iocalc-agent-0001" },
-          transcript: { transport: "mcp", startedAt: "2026-06-27T00:00:00Z", events: [] }
+          transcript: { transport: "mcp", startedAt: "2026-06-27T00:00:00Z", events: [] },
+          serverTriadBracket: sampleServerTriadBracket()
         });
         return;
       }

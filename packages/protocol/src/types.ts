@@ -325,8 +325,44 @@ export interface AgentTrialResult {
   winner?: string;
   scorecard: Record<string, unknown>;
   transcript: IocalcTranscript;
+  serverTriadBracket?: IocalcServerTriadBracket;
   boundary?: IocalcBoundaryDecision;
   audit?: IocalcAuditEvent;
+}
+
+export interface IocalcStableMatchupMetrics {
+  metricVersion: "iocalc-stable-matchup-metrics-v1";
+  source: "browser-local-sandbox" | "server-local-sandbox";
+  completionMetricKind: "building-level-ups" | "score-delta-proxy";
+  scoreMargin: number;
+  completionTempo: number;
+  completionCount: number;
+  repeatRate: number;
+  energyShortfall: number;
+  damageLeak: number;
+  fallbackCount: number;
+  policyStability: "stable" | "watch" | "unstable";
+  matchupSummary: string;
+}
+
+export interface IocalcServerTriadBracket {
+  schemaVersion: "iocalc-server-triad-bracket-v1";
+  source: "server-local-sandbox";
+  seed: string;
+  seasons: number;
+  completed: boolean;
+  generatedAt?: string;
+  stableMetricKeys?: string[];
+  metricSemantics?: Record<string, unknown>;
+  serverMetricPolicy?: string;
+  serverVerified?: boolean;
+  leaderboardEvidence?: boolean;
+  browserParity?: string;
+  policies?: Array<Record<string, unknown>>;
+  standings?: Array<Record<string, unknown>>;
+  matches?: Array<Record<string, unknown>>;
+  summary?: string;
+  safetyBoundary?: Record<string, boolean>;
 }
 
 export interface IocalcTranscriptEvent {

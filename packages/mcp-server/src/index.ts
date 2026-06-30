@@ -226,7 +226,7 @@ const COMMAND_SOURCES = new Set(["human", "ai", "fallback", "scripted", "manual"
 const TRANSPORTS = new Set(["manual", "browser", "http", "mcp", "local-core"]);
 const TRANSCRIPT_EVENT_TYPES = new Set(["state", "command", "resolution", "report", "log", "error"]);
 const FORBIDDEN_MCP_TEXT =
-  /\b(?:accounts?|api[_ -]?key|auth|bearer|broker|coinbase|contracts?|cookies?|crypto|deploy|deployment|eval|execute|financial|login|mnemonic|oauth|password|private[_ -]?key|production|secrets?|seed phrase|sessions?|shell|sudo|tokens?|transactions?|transfers?|wallets?|withdraw(?:al)?)\b/i;
+  /\b(?:accounts?|api[_ -]?key|auth|bearer|broker|coinbase|contracts?|cookies?|crypto|deploy|deployment|eval|execute|feedback|fetch|financial|login|mnemonic|oauth|password|payments?|payouts?|private[_ -]?key|production|secrets?|seed phrase|sessions?|shell|sudo|tokens?|transactions?|transfers?|trust|urls?|wallets?|withdraw(?:al)?)\b/i;
 const FORBIDDEN_MCP_TEXT_GLOBAL = new RegExp(FORBIDDEN_MCP_TEXT.source, "gi");
 const SENSITIVE_RESULT_KEY =
   /(?:account|api.*key|auth|bearer|cookie|credential|deploy|feedback|fetch|financial|key|login|mnemonic|oauth|password|permission|private|production|secret|session|token|transaction|trust|url|wallet|withdraw)/i;
@@ -277,6 +277,39 @@ const COMMAND_REQUEST_FIELD_KEYS = ["sandboxId", "mode", "agentName", "command",
 const AGENT_TRIAL_REQUEST_FIELD_KEYS = ["sandboxId", "agentA", "agentB", "seasons", "seed"];
 const PROTOTYPE_RESULT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const SAFE_RESPONSE_FIELD_PATH = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/;
+const STABLE_MATCHUP_METRIC_VERSION = "iocalc-stable-matchup-metrics-v1";
+const STABLE_MATCHUP_METRIC_KEYS = [
+  "scoreMargin",
+  "completionTempo",
+  "completionCount",
+  "repeatRate",
+  "energyShortfall",
+  "damageLeak",
+  "fallbackCount",
+  "policyStability"
+] as const;
+const SERVER_TRIAD_PARTICIPANT_IDS = new Set(["balanced-scripted", "compounder-agent", "compounder-heuristic"]);
+const SERVER_TRIAD_RESULT_IDS = new Set([...SERVER_TRIAD_PARTICIPANT_IDS, "draw"]);
+const SERVER_TRIAD_CONTROLLERS = new Set(["scripted-agent", "compounder-agent", "local-heuristic-ai"]);
+const SERVER_TRIAD_POLICY_KINDS = new Set([
+  "server-local-script",
+  "server-local-compounder-agent",
+  "server-local-compounder-analogue"
+]);
+const STABLE_METRIC_SOURCES = new Set(["browser-local-sandbox", "server-local-sandbox"]);
+const STABLE_COMPLETION_KINDS = new Set(["building-level-ups", "score-delta-proxy"]);
+const STABLE_POLICY_STATES = new Set(["stable", "watch", "unstable"]);
+const SERVER_TRIAD_SAFE_BOUNDARY = Object.freeze({
+  sandboxOnly: true,
+  submittedTextIsExecuted: false,
+  walletActionsEnabled: false,
+  feedbackCanMutateGameplay: false,
+  externalUrlFetchEnabled: false,
+  codeExecutionEnabled: false,
+  secretsAccessEnabled: false,
+  productionMutationEnabled: false,
+  financialFunctionalityEnabled: false
+});
 
 export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcMcpToolBridge {
   return {
@@ -650,6 +683,160 @@ function sanitizeGovernanceLedger(ledger: IocalcAgentGovernanceLedger): IocalcAg
   return ledger;
 }
 
+function sanitizeStableMatchupMetrics(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const metricVersion = record.metricVersion === STABLE_MATCHUP_METRIC_VERSION ? STABLE_MATCHUP_METRIC_VERSION : undefined;
+  const source = sanitizeEnum(record.source, STABLE_METRIC_SOURCES);
+  const completionMetricKind = sanitizeEnum(record.completionMetricKind, STABLE_COMPLETION_KINDS);
+  const policyStability = sanitizeEnum(record.policyStability, STABLE_POLICY_STATES);
+  if (!metricVersion || !source || !completionMetricKind || !policyStability) return undefined;
+  return {
+    metricVersion,
+    source,
+    completionMetricKind,
+    scoreMargin: sanitizeNumber(record.scoreMargin, 0),
+    completionTempo: sanitizeNumber(record.completionTempo, 0),
+    completionCount: sanitizeNumber(record.completionCount, 0),
+    repeatRate: Math.min(1, Math.max(0, sanitizeNumber(record.repeatRate, 0))),
+    energyShortfall: sanitizeNumber(record.energyShortfall, 0),
+    damageLeak: sanitizeNumber(record.damageLeak, 0),
+    fallbackCount: sanitizeNumber(record.fallbackCount, 0),
+    policyStability,
+    matchupSummary: sanitizeVisibleText(record.matchupSummary, 360) ?? ""
+  };
+}
+
+function sanitizeServerTriadPolicy(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const id = sanitizeEnum(record.id, SERVER_TRIAD_PARTICIPANT_IDS);
+  const controller = sanitizeEnum(record.controller, SERVER_TRIAD_CONTROLLERS);
+  if (!id || !controller) return undefined;
+  return dropUndefined({
+    id,
+    label: sanitizeShortText(record.label),
+    controller,
+    strategyBias: record.strategyBias === "compounder" ? "compounder" : "balanced",
+    canonicalAgentId: sanitizeAgentId(record.canonicalAgentId),
+    policyKind: sanitizeEnum(record.policyKind, SERVER_TRIAD_POLICY_KINDS)
+  });
+}
+
+function sanitizeServerTriadStanding(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const id = sanitizeEnum(record.id, SERVER_TRIAD_PARTICIPANT_IDS);
+  const stableMetrics = sanitizeStableMatchupMetrics(record.stableMetrics);
+  if (!id || !stableMetrics) return undefined;
+  return dropUndefined({
+    id,
+    label: sanitizeShortText(record.label),
+    controller: sanitizeEnum(record.controller, SERVER_TRIAD_CONTROLLERS),
+    strategyBias: record.strategyBias === "compounder" ? "compounder" : "balanced",
+    policyKind: sanitizeEnum(record.policyKind, SERVER_TRIAD_POLICY_KINDS),
+    points: sanitizeNumber(record.points, 0),
+    wins: sanitizeNumber(record.wins, 0),
+    draws: sanitizeNumber(record.draws, 0),
+    losses: sanitizeNumber(record.losses, 0),
+    scoreFor: sanitizeNumber(record.scoreFor, 0),
+    scoreAgainst: sanitizeNumber(record.scoreAgainst, 0),
+    margin: sanitizeNumber(record.margin, 0),
+    completionProxy: sanitizeNumber(record.completionProxy, 0),
+    shortfall: sanitizeNumber(record.shortfall, 0),
+    repeatCount: sanitizeNumber(record.repeatCount, 0),
+    fallbackCount: sanitizeNumber(record.fallbackCount, 0),
+    sharedDamageDelta: sanitizeNumber(record.sharedDamageDelta, 0),
+    stableMetrics
+  });
+}
+
+function sanitizeServerTriadMatch(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const leftId = sanitizeEnum(record.leftId, SERVER_TRIAD_PARTICIPANT_IDS);
+  const rightId = sanitizeEnum(record.rightId, SERVER_TRIAD_PARTICIPANT_IDS);
+  const winner = sanitizeEnum(record.winner, SERVER_TRIAD_RESULT_IDS);
+  const rawStable = record.stableMetrics && typeof record.stableMetrics === "object" && !Array.isArray(record.stableMetrics)
+    ? (record.stableMetrics as Record<string, unknown>)
+    : {};
+  const leftStableMetrics = sanitizeStableMatchupMetrics(rawStable.left);
+  const rightStableMetrics = sanitizeStableMatchupMetrics(rawStable.right);
+  if (!leftId || !rightId || !winner || !leftStableMetrics || !rightStableMetrics) return undefined;
+  return dropUndefined({
+    id: sanitizeShortText(record.id),
+    leftId,
+    rightId,
+    leftLabel: sanitizeShortText(record.leftLabel),
+    rightLabel: sanitizeShortText(record.rightLabel),
+    leftController: sanitizeEnum(record.leftController, SERVER_TRIAD_CONTROLLERS),
+    rightController: sanitizeEnum(record.rightController, SERVER_TRIAD_CONTROLLERS),
+    winner,
+    winnerLabel: sanitizeShortText(record.winnerLabel),
+    seasonCount: sanitizeNumber(record.seasonCount, 0),
+    leftScore: sanitizeNumber(record.leftScore, 0),
+    rightScore: sanitizeNumber(record.rightScore, 0),
+    leftCompletionProxy: sanitizeNumber(record.leftCompletionProxy, 0),
+    rightCompletionProxy: sanitizeNumber(record.rightCompletionProxy, 0),
+    leftRepeatCount: sanitizeNumber(record.leftRepeatCount, 0),
+    rightRepeatCount: sanitizeNumber(record.rightRepeatCount, 0),
+    leftUniqueCommands: sanitizeNumber(record.leftUniqueCommands, 0),
+    rightUniqueCommands: sanitizeNumber(record.rightUniqueCommands, 0),
+    leftTopCommand: sanitizeVisibleText(record.leftTopCommand, 240),
+    rightTopCommand: sanitizeVisibleText(record.rightTopCommand, 240),
+    finalDamage: sanitizeNumber(record.finalDamage, 0),
+    damageDelta: sanitizeNumber(record.damageDelta, 0),
+    finalPressure: sanitizeNumber(record.finalPressure, 0),
+    stableMetrics: {
+      left: leftStableMetrics,
+      right: rightStableMetrics
+    },
+    summary: sanitizeVisibleText(record.summary, 360)
+  });
+}
+
+function sanitizeServerTriadBracket(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.schemaVersion !== "iocalc-server-triad-bracket-v1" || record.source !== "server-local-sandbox") return undefined;
+  const metricSemantics = record.metricSemantics && typeof record.metricSemantics === "object" && !Array.isArray(record.metricSemantics)
+    ? (record.metricSemantics as Record<string, unknown>)
+    : {};
+  return dropUndefined({
+    schemaVersion: "iocalc-server-triad-bracket-v1",
+    source: "server-local-sandbox",
+    seed: sanitizeShortText(record.seed) ?? "server-triad",
+    seasons: sanitizeNumber(record.seasons, 0),
+    completed: Boolean(record.completed),
+    generatedAt: sanitizeShortText(record.generatedAt),
+    stableMetricKeys: Array.isArray(record.stableMetricKeys)
+      ? record.stableMetricKeys.filter((key): key is string => STABLE_MATCHUP_METRIC_KEYS.includes(key as typeof STABLE_MATCHUP_METRIC_KEYS[number]))
+      : undefined,
+    metricSemantics: dropUndefined({
+      metricVersion: metricSemantics.metricVersion === STABLE_MATCHUP_METRIC_VERSION ? STABLE_MATCHUP_METRIC_VERSION : undefined,
+      completionMetricKind: sanitizeEnum(metricSemantics.completionMetricKind, STABLE_COMPLETION_KINDS),
+      source: sanitizeEnum(metricSemantics.source, STABLE_METRIC_SOURCES),
+      authority: metricSemantics.authority === "server-local-analogue" ? "server-local-analogue" : undefined,
+      damageMetricKind: metricSemantics.damageMetricKind === "shared-risk-damage-delta" ? "shared-risk-damage-delta" : undefined
+    }),
+    serverMetricPolicy: sanitizeVisibleText(record.serverMetricPolicy, 1000),
+    serverVerified: record.serverVerified === true,
+    leaderboardEvidence: record.leaderboardEvidence === true,
+    browserParity: record.browserParity === "server-local-analogue" ? "server-local-analogue" : undefined,
+    policies: Array.isArray(record.policies)
+      ? record.policies.map((policy) => sanitizeServerTriadPolicy(policy)).filter((policy): policy is Record<string, unknown> => Boolean(policy))
+      : undefined,
+    standings: Array.isArray(record.standings)
+      ? record.standings.map((standing) => sanitizeServerTriadStanding(standing)).filter((standing): standing is Record<string, unknown> => Boolean(standing))
+      : undefined,
+    matches: Array.isArray(record.matches)
+      ? record.matches.map((match) => sanitizeServerTriadMatch(match)).filter((match): match is Record<string, unknown> => Boolean(match))
+      : undefined,
+    summary: sanitizeVisibleText(record.summary, 420),
+    safetyBoundary: { ...SERVER_TRIAD_SAFE_BOUNDARY }
+  });
+}
+
 function sanitizeAgentTrialResult(result: AgentTrialResult): AgentTrialResult {
   return dropUndefined({
     sandboxId: sanitizeOptionalSandboxValue(result.sandboxId),
@@ -668,7 +855,8 @@ function sanitizeAgentTrialResult(result: AgentTrialResult): AgentTrialResult {
             })
           )
         }
-      : { transport: "mcp", startedAt: "", events: [] }
+      : { transport: "mcp", startedAt: "", events: [] },
+    serverTriadBracket: sanitizeServerTriadBracket(result.serverTriadBracket)
   }) as unknown as AgentTrialResult;
 }
 
