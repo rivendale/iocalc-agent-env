@@ -13,6 +13,7 @@ iocalc.resolve_season
 iocalc.get_report
 iocalc.get_log
 iocalc.get_match_history
+iocalc.get_governance_ledger
 iocalc.run_agent_trial
 ```
 
@@ -45,10 +46,12 @@ preflights the wrapped adapter's capabilities before calling into gameplay.
 `getManifest()` and returns only sanitized sandbox contract metadata.
 `submit_command` rejects empty command text, link-like text, code-like text,
 secret-like text, wallet/account/production/deployment/financial terms, and
-unexpected argument fields before calling the adapter. `run_agent_trial` accepts
-only canonical IOCALC agent IDs such as `iocalc-agent-0001` and returns an
-MCP-style error result if the wrapped adapter does not support sandbox agent
-trials.
+unexpected argument fields before calling the adapter. `get_governance_ledger`
+validates the read-only ledger with `assertAgentGovernanceLedger()` and returns
+an MCP-style error result if the wrapped adapter does not support the sandbox
+ledger route. `run_agent_trial` accepts only canonical IOCALC agent IDs such as
+`iocalc-agent-0001` and returns an MCP-style error result if the wrapped adapter
+does not support sandbox agent trials.
 
 Tool results are canonical sanitized shapes. The bridge does not return adapter
 `raw` payloads, permission-like fields, wallet/account/session fields, secret
@@ -78,7 +81,7 @@ IOCALC_BASE_URL=http://127.0.0.1:8090 IOCALC_SANDBOX_ID=local-agent-001 iocalc-m
 ```
 
 The wrapper does not bind a port, hold secrets, create account/session/wallet
-authority, fetch arbitrary URLs, or add any tools. `IOCALC_BASE_URL` is still
-validated by `createIocalcHttpMcpToolBridge`, so local development targets must
-be localhost/127.0.0.1/[::1] roots and approved public targets must use HTTPS
-`iocalc.com` or `play.iocalc.com` roots.
+authority, fetch arbitrary URLs, or add any tools beyond the bridge.
+`IOCALC_BASE_URL` is still validated by `createIocalcHttpMcpToolBridge`, so
+local development targets must be localhost/127.0.0.1/[::1] roots and approved
+public targets must use HTTPS `iocalc.com` or `play.iocalc.com` roots.

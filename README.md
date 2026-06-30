@@ -53,6 +53,7 @@ const state = await adapter.getState();
 await adapter.submitCommand({ mode: "season_duel", command: "repair wall and gather wood" });
 const resolution = await adapter.resolveSeason({ seed: "demo-seed" });
 const report = await adapter.getReport();
+const ledger = await adapter.getGovernanceLedger?.();
 ```
 
 `getManifest()` is optional because manual and browser transports may not expose
@@ -113,7 +114,9 @@ await bridge.callTool("iocalc.submit_command", {
 ```
 
 The MCP bridge also exposes `iocalc.get_manifest` when the wrapped adapter
-supports `getManifest()`. Manifest output is sanitized and descriptive only.
+supports `getManifest()` and `iocalc.get_governance_ledger` when the wrapped
+adapter supports `getGovernanceLedger()`. Manifest output is sanitized and
+descriptive only. Governance ledger output is validated read-only evidence.
 Bridge authors can run `runIocalcMcpToolBridgeConformance(bridge)` to verify the
 fixed sandbox tool list, closed tool schemas, unsafe probe rejection, and
 non-reflective error output.
@@ -138,7 +141,7 @@ Allowed:
 - read sandbox game state
 - submit sandbox game commands
 - resolve deterministic seasons
-- read reports/logs/match history
+- read reports/logs/match history/governance ledger evidence
 - run sandbox agent trials
 
 Forbidden:
@@ -154,4 +157,4 @@ Forbidden:
 
 ## Status
 
-Current open-source foundation. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, opt-in MCP stdio wrapper, manifest response checks, and agent governance ledger helpers are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.
+Current open-source foundation. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, opt-in MCP stdio wrapper, manifest response checks, and read-only agent governance ledger support are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.
