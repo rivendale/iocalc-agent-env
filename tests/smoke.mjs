@@ -743,6 +743,59 @@ const rejected = await adapter.submitCommand({
 });
 assert.equal(rejected.accepted, false);
 
+const mcpGovernanceBoundary = makeSandboxBoundaryDecision("read_state", "Read sandbox state for MCP smoke.");
+const mcpGovernanceEntryPayload = {
+  sequence: 1,
+  id: "entry-mcp-0001",
+  at: "2026-06-26T00:00:00Z",
+  eventType: "tool-call",
+  sessionId: "run-mcp-0001",
+  actor: {
+    canonicalAgentId: "iocalc-agent-0001",
+    displayName: "IOCALC Guide 001",
+    controllerType: "scripted-agent",
+    commandSource: "mcp"
+  },
+  transport: "mcp",
+  sandboxId: "mcp-sandbox",
+  action: "read_state",
+  summary: "MCP read sandbox state.",
+  verdict: "allow",
+  verdictWeight: 1,
+  boundary: mcpGovernanceBoundary
+};
+const mcpGovernanceEntry = {
+  ...mcpGovernanceEntryPayload,
+  evidence: makeAgentGovernanceEntryEvidence(mcpGovernanceEntryPayload)
+};
+const mcpGovernanceLedger = {
+  schemaVersion: "iocalc-agent-governance-v1",
+  project: "IOCALC",
+  ledgerId: "ledger-mcp-0001",
+  generatedAt: "2026-06-26T00:00:00Z",
+  policy: DEFAULT_AGENT_GOVERNANCE_POLICY,
+  sessions: [
+    {
+      sessionId: "run-mcp-0001",
+      canonicalAgentId: "iocalc-agent-0001",
+      displayName: "IOCALC Guide 001",
+      controllerType: "scripted-agent",
+      commandSource: "mcp",
+      transport: "mcp",
+      sandboxId: "mcp-sandbox",
+      owner: "local-test",
+      status: "active",
+      startedAt: "2026-06-26T00:00:00Z",
+      capabilityScope: ["canReadState", "canSubmitGameCommand", "canResolveSeason", "canReadReport", "canRunAgentTrial"],
+      blockedCapabilities: [...IOCALC_FORBIDDEN_CAPABILITIES],
+      policy: DEFAULT_AGENT_GOVERNANCE_POLICY
+    }
+  ],
+  entries: [mcpGovernanceEntry],
+  latestDigest: mcpGovernanceEntry.evidence.entryDigest
+};
+assertAgentGovernanceLedger(mcpGovernanceLedger);
+
 const capturedRequests = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, init = {}) => {
@@ -753,23 +806,19 @@ globalThis.fetch = async (url, init = {}) => {
   });
   const pathname = new URL(String(url)).pathname;
   const sandboxId = new URL(String(url)).searchParams.get("sandboxId") ?? "missing-sandbox";
-  const payload = pathname.endsWith("/manifest")
-    ? sampleGameApiManifest
-    : pathname.endsWith("/capabilities")
-    ? DEFAULT_SAFE_CAPABILITIES
-    : pathname.endsWith("/state")
-      ? { sandboxId, mode: "season_duel", season: 0, agents: [] }
-      : pathname.endsWith("/command")
-        ? { accepted: true, sandboxId, command: "repair wall and gather wood", warnings: [] }
-        : pathname.endsWith("/resolve")
-          ? { resolved: true, sandboxId, season: 1 }
-          : pathname.endsWith("/report")
-            ? { sandboxId, text: "report" }
-            : pathname.endsWith("/log")
-              ? { sandboxId, entries: [] }
-              : pathname.endsWith("/match-history")
-                ? { sandboxId, matches: [] }
-                : { sandboxId, scorecard: {}, transcript: { transport: "http", startedAt: "2026-06-26T00:00:00Z", events: [] } };
+  const payloadByPath = {
+    "/api/game/manifest": sampleGameApiManifest,
+    "/api/game/capabilities": DEFAULT_SAFE_CAPABILITIES,
+    "/api/game/state": { sandboxId, mode: "season_duel", season: 0, agents: [] },
+    "/api/game/command": { accepted: true, sandboxId, command: "repair wall and gather wood", warnings: [] },
+    "/api/game/resolve": { resolved: true, sandboxId, season: 1 },
+    "/api/game/report": { sandboxId, text: "report" },
+    "/api/game/log": { sandboxId, entries: [] },
+    "/api/game/match-history": { sandboxId, matches: [] },
+    "/api/game/governance-ledger": mcpGovernanceLedger
+  };
+  const payload =
+    payloadByPath[pathname] ?? { sandboxId, scorecard: {}, transcript: { transport: "http", startedAt: "2026-06-26T00:00:00Z", events: [] } };
   return {
     ok: true,
     status: 200,
@@ -794,12 +843,16 @@ await httpAdapter.runAgentTrial({
   agentB: "iocalc-runner-0001",
   seasons: 1
 });
+const httpGovernanceLedger = await httpAdapter.getGovernanceLedger();
 
 assert.equal(capturedRequests[0].url.includes("sandboxId=smoke-sandbox"), true);
 assert.equal(capturedRequests[1].url.includes("sandboxId=override-sandbox"), true);
 assert.equal(capturedRequests[1].body.sandboxId, "override-sandbox");
 assert.equal(capturedRequests[2].body.sandboxId, "smoke-sandbox");
 assert.equal(capturedRequests[3].body.sandboxId, "smoke-sandbox");
+assert.equal(capturedRequests[4].url.includes("/api/game/governance-ledger"), true);
+assert.equal(capturedRequests[4].url.includes("sandboxId=smoke-sandbox"), true);
+assertAgentGovernanceLedger(httpGovernanceLedger);
 const httpManifest = await httpAdapter.getManifest();
 assertSandboxGameApiManifest(httpManifest);
 assert.equal(capturedRequests.at(-1).url.endsWith("/api/game/manifest"), true);
@@ -1823,6 +1876,10 @@ const fakeMcpAdapter = {
     mcpCalls.push(["getMatchHistory"]);
     return { matches: [{ season: 1 }] };
   },
+  async getGovernanceLedger() {
+    mcpCalls.push(["getGovernanceLedger"]);
+    return mcpGovernanceLedger;
+  },
   async runAgentTrial(input) {
     mcpCalls.push(["runAgentTrial", input]);
     return {
@@ -1834,6 +1891,7 @@ const fakeMcpAdapter = {
 
 assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.get_manifest"), true);
 assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.submit_command"), true);
+assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
 assert.equal(IOCALC_MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false), true);
 
 const mcpBridge = createIocalcMcpToolBridge(fakeMcpAdapter);
@@ -2026,6 +2084,9 @@ assert.equal(mcpCalls.length, mcpCallCountBeforeReject);
 const mcpRejectedExtraArg = await mcpBridge.callTool("iocalc.get_state", { extra: true });
 assert.equal(mcpRejectedExtraArg.isError, true);
 
+const mcpRejectedGovernanceExtraArg = await mcpBridge.callTool("iocalc.get_governance_ledger", { extra: true });
+assert.equal(mcpRejectedGovernanceExtraArg.isError, true);
+
 const mcpResolution = await mcpBridge.callTool("iocalc.resolve_season", {
   seed: "demo-seed",
   sandboxId: "mcp-sandbox"
@@ -2040,6 +2101,11 @@ const mcpTrial = await mcpBridge.callTool("iocalc.run_agent_trial", {
   seasons: 3
 });
 assert.equal(mcpTrial.structuredContent.scorecard.winner, "iocalc-agent-0001");
+
+const mcpGovernance = await mcpBridge.callTool("iocalc.get_governance_ledger");
+assert.equal(mcpGovernance.isError, undefined);
+assertAgentGovernanceLedger(mcpGovernance.structuredContent);
+assert.equal(mcpGovernance.structuredContent.ledgerId, "ledger-mcp-0001");
 
 const mcpCallCountBeforeBadAgent = mcpCalls.length;
 const mcpRejectedAgentUrl = await mcpBridge.callTool("iocalc.run_agent_trial", {
@@ -2099,6 +2165,12 @@ const mcpUnsupportedManifest = await createIocalcMcpToolBridge({
   getManifest: undefined
 }).callTool("iocalc.get_manifest");
 assert.equal(mcpUnsupportedManifest.isError, true);
+
+const mcpUnsupportedGovernanceLedger = await createIocalcMcpToolBridge({
+  ...fakeMcpAdapter,
+  getGovernanceLedger: undefined
+}).callTool("iocalc.get_governance_ledger");
+assert.equal(mcpUnsupportedGovernanceLedger.isError, true);
 
 const mcpUnsafeManifest = await createIocalcMcpToolBridge({
   ...fakeMcpAdapter,
@@ -2209,6 +2281,7 @@ const stdioTools = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
   }
 });
 assert.equal(stdioTools.result.tools.some((tool) => tool.name === "iocalc.submit_command"), true);
+assert.equal(stdioTools.result.tools.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
 assert.equal(stdioTools.result.tools.every((tool) => tool.inputSchema.additionalProperties === false), true);
 
 const stdioToolCall = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
@@ -2347,6 +2420,7 @@ try {
   sendJsonRpcLine(stdioChild, 12, "tools/list", {});
   const spawnedTools = JSON.parse(await stdioLines.nextLine());
   assert.equal(spawnedTools.result.tools.some((tool) => tool.name === "iocalc.get_capabilities"), true);
+  assert.equal(spawnedTools.result.tools.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
 
   sendJsonRpcLine(stdioChild, 13, "tools/call", {
     name: "iocalc.get_capabilities",
@@ -2367,6 +2441,14 @@ try {
   assert.equal(spawnedCommand.result.structuredContent.command, "repair wall and gather wood");
 
   sendJsonRpcLine(stdioChild, 15, "tools/call", {
+    name: "iocalc.get_governance_ledger",
+    arguments: {}
+  });
+  const spawnedGovernanceLedger = JSON.parse(await stdioLines.nextLine());
+  assert.equal(spawnedGovernanceLedger.result.isError, false);
+  assertAgentGovernanceLedger(spawnedGovernanceLedger.result.structuredContent);
+
+  sendJsonRpcLine(stdioChild, 16, "tools/call", {
     name: "iocalc.wallet_withdraw_api_key_https://wallet.invalid",
     arguments: {}
   });
@@ -2376,7 +2458,7 @@ try {
   assert.equal(spawnedUnsafeTool.result.content[0].text.includes("api_key"), false);
   assert.equal(spawnedUnsafeTool.result.content[0].text.includes("wallet.invalid"), false);
 
-  sendJsonRpcLine(stdioChild, 16, "wallet.approve_https://wallet.invalid", { api_key: "hunter2" });
+  sendJsonRpcLine(stdioChild, 17, "wallet.approve_https://wallet.invalid", { api_key: "hunter2" });
   const spawnedUnsafeMethod = JSON.parse(await stdioLines.nextLine());
   assert.equal(spawnedUnsafeMethod.error.code, -32601);
   assert.equal(spawnedUnsafeMethod.error.message.includes("wallet"), false);
@@ -3068,6 +3150,10 @@ async function startLocalMcpSandboxServer() {
       }
       if (request.method === "GET" && requestUrl.pathname === "/api/game/match-history") {
         sendJson(response, 200, { matches: [{ season }] });
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/api/game/governance-ledger") {
+        sendJson(response, 200, mcpGovernanceLedger);
         return;
       }
       if (request.method === "POST" && requestUrl.pathname === "/api/game/agent-trial") {

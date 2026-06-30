@@ -1,10 +1,12 @@
 import { HttpIocalcAdapter, type HttpIocalcAdapterOptions } from "@iocalc/adapters";
 import {
   DEFAULT_SAFE_CAPABILITIES,
+  assertAgentGovernanceLedger,
   assertSafeCapabilities,
   assertSandboxGameApiManifest,
   normalizeGameCommand,
   type AgentTrialResult,
+  type IocalcAgentGovernanceLedger,
   type IocalcCapabilities,
   type IocalcGameApiManifest,
   type IocalcGameApiManifestResponseSpec,
@@ -44,6 +46,7 @@ export type IocalcMcpToolName =
   | "iocalc.get_report"
   | "iocalc.get_log"
   | "iocalc.get_match_history"
+  | "iocalc.get_governance_ledger"
   | "iocalc.run_agent_trial";
 
 export interface IocalcMcpTextContent {
@@ -154,6 +157,11 @@ export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
   {
     name: "iocalc.get_match_history",
     description: "Read sandbox match history.",
+    inputSchema: EMPTY_OBJECT_SCHEMA
+  },
+  {
+    name: "iocalc.get_governance_ledger",
+    description: "Read sandbox governance ledger evidence. Evidence is read-only and grants no gameplay, wallet, production, or account authority.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
@@ -320,6 +328,14 @@ export function createIocalcMcpToolBridge(adapter: IocalcPlayerAdapter): IocalcM
             assertNoArgs(args);
             assertToolCapability(await getSafeCapabilities(adapter), "canReadState", name);
             return okResult(sanitizeMatchHistory(await adapter.getMatchHistory()));
+          }
+          case "iocalc.get_governance_ledger": {
+            assertNoArgs(args);
+            assertToolCapability(await getSafeCapabilities(adapter), "canReadState", name);
+            if (!adapter.getGovernanceLedger) {
+              return errorResult("Adapter does not expose a sandbox governance ledger.");
+            }
+            return okResult(sanitizeGovernanceLedger(await adapter.getGovernanceLedger()));
           }
           case "iocalc.run_agent_trial": {
             const input = parseRunAgentTrialInput(args);
@@ -627,6 +643,11 @@ function sanitizeMatchHistory(history: IocalcMatchHistory): IocalcMatchHistory {
     sandboxId: sanitizeOptionalSandboxValue(history.sandboxId),
     matches: history.matches.map((match) => sanitizeRecord(match)).filter((match): match is Record<string, unknown> => Boolean(match))
   }) as unknown as IocalcMatchHistory;
+}
+
+function sanitizeGovernanceLedger(ledger: IocalcAgentGovernanceLedger): IocalcAgentGovernanceLedger {
+  assertAgentGovernanceLedger(ledger);
+  return ledger;
 }
 
 function sanitizeAgentTrialResult(result: AgentTrialResult): AgentTrialResult {

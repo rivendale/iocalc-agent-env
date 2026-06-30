@@ -1,3 +1,5 @@
+import type { IocalcAgentGovernanceLedger } from "./governance.js";
+
 export type IocalcTransport = "manual" | "browser" | "http" | "mcp" | "local-core";
 
 export type IocalcMode = "season_duel" | "agent_trials";
@@ -350,5 +352,6 @@ export interface IocalcPlayerAdapter {
   getReport(): Promise<IocalcSeasonReport>;
   getLog(): Promise<IocalcSystemLog>;
   getMatchHistory(): Promise<IocalcMatchHistory>;
+  getGovernanceLedger?(): Promise<IocalcAgentGovernanceLedger>;
   runAgentTrial?(input: RunAgentTrialInput): Promise<AgentTrialResult>;
 }

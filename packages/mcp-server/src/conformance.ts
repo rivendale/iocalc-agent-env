@@ -31,6 +31,7 @@ const EXPECTED_MCP_TOOL_NAMES = [
   "iocalc.get_report",
   "iocalc.get_log",
   "iocalc.get_match_history",
+  "iocalc.get_governance_ledger",
   "iocalc.run_agent_trial"
 ];
 

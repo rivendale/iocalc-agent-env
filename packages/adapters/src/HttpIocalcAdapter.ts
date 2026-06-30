@@ -1,6 +1,7 @@
 import {
   normalizeGameCommand,
   type AgentTrialResult,
+  type IocalcAgentGovernanceLedger,
   type IocalcCapabilities,
   type IocalcGameApiManifest,
   type IocalcGameState,
@@ -156,6 +157,10 @@ export class HttpIocalcAdapter implements IocalcPlayerAdapter {
 
   getMatchHistory(): Promise<IocalcMatchHistory> {
     return getJson(endpointUrl(this.baseUrl, "api/game/match-history", this.sandboxId), this.sandboxId);
+  }
+
+  getGovernanceLedger(): Promise<IocalcAgentGovernanceLedger> {
+    return getJson(endpointUrl(this.baseUrl, "api/game/governance-ledger", this.sandboxId), this.sandboxId);
   }
 
   runAgentTrial(input: RunAgentTrialInput): Promise<AgentTrialResult> {
