@@ -17,6 +17,10 @@ approval, feedback trust, financial advice, or deployment control.
   or fallback
 - contamination signals across agent-to-agent topology hops
 - scenario or Monte Carlo style risk bands for sandbox uncertainty
+- optional public scenario seed context (`scenarioId` plus a fixed `scenario`
+  record) when a sandbox was initialized from a published benchmark scenario
+- MCP connector and local compounder-agent actors (`mcp-connector` and
+  `compounder-agent` controller types) alongside the existing local controllers
 - deterministic non-cryptographic evidence fingerprints and previous-entry
   linkage
 

@@ -8,7 +8,9 @@ export type IocalcControllerType =
   | "human"
   | "advisor-fallback"
   | "local-heuristic-ai"
+  | "compounder-agent"
   | "scripted-agent"
+  | "mcp-connector"
   | "future-remote-agent";
 
 export type IocalcCommandSource =
@@ -16,11 +18,39 @@ export type IocalcCommandSource =
   | "ai"
   | "fallback"
   | "scripted"
+  | "compounder-agent"
   | "manual"
   | "browser"
   | "http"
   | "mcp"
   | "local-core";
+
+// Canonical runtime value lists for the string unions above. These are the
+// single source of truth for every allowlist in the package: validators
+// (governance.ts, capabilities.ts) and the MCP connector both derive their sets
+// from these arrays so their accepted vocabularies cannot drift apart.
+export const IOCALC_CONTROLLER_TYPES = [
+  "human",
+  "advisor-fallback",
+  "local-heuristic-ai",
+  "compounder-agent",
+  "scripted-agent",
+  "mcp-connector",
+  "future-remote-agent"
+] as const satisfies readonly IocalcControllerType[];
+
+export const IOCALC_COMMAND_SOURCES = [
+  "human",
+  "ai",
+  "fallback",
+  "scripted",
+  "compounder-agent",
+  "manual",
+  "browser",
+  "http",
+  "mcp",
+  "local-core"
+] as const satisfies readonly IocalcCommandSource[];
 
 export type IocalcSafeCapabilityName =
   | "canReadState"
