@@ -6,9 +6,24 @@ import type {
   IocalcSafeCapabilityName,
   IocalcTransport
 } from "./types.js";
+import { IOCALC_COMMAND_SOURCES, IOCALC_CONTROLLER_TYPES } from "./types.js";
 import { assertSandboxBoundaryDecision, IOCALC_FORBIDDEN_CAPABILITIES } from "./capabilities.js";
 
 export const IOCALC_AGENT_GOVERNANCE_SCHEMA_VERSION = "iocalc-agent-governance-v1" as const;
+
+export const IOCALC_GAME_SCENARIO_SETUP_VERSION = "iocalc-game-scenario-setup-v1" as const;
+
+export interface IocalcGameScenarioRecord {
+  id: string;
+  label: string;
+  setupVersion: typeof IOCALC_GAME_SCENARIO_SETUP_VERSION;
+  sandboxOnly: true;
+  notFinancialAdvice: true;
+  notInvestmentProduct: true;
+  publicRoutesCanSpendCredits: false;
+  wiredIntoResolver: true;
+  setupText: string;
+}
 
 export type IocalcAgentGovernanceEventType =
   | "session-started"
@@ -141,6 +156,8 @@ export interface IocalcAgentGovernanceLedger {
   project: "IOCALC";
   ledgerId: string;
   generatedAt: string;
+  scenarioId?: string;
+  scenario?: IocalcGameScenarioRecord | null;
   policy: IocalcAgentGovernancePolicy;
   sessions: IocalcAgentGovernanceSession[];
   entries: IocalcAgentGovernanceLedgerEntry[];
@@ -152,14 +169,8 @@ const SAFE_ID = /^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,118}[A-Za-z0-9])?$/;
 const CANONICAL_AGENT_ID = /^iocalc-(?:agent|guide|runner|referee)-[0-9]{4}$/;
 const DIGEST_PATTERN = /^fnv1a64:[a-f0-9]{16}$/;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
-const CONTROLLER_TYPES = new Set<IocalcControllerType>([
-  "human",
-  "advisor-fallback",
-  "local-heuristic-ai",
-  "scripted-agent",
-  "future-remote-agent"
-]);
-const COMMAND_SOURCES = new Set<IocalcCommandSource>(["human", "ai", "fallback", "scripted", "manual", "browser", "http", "mcp", "local-core"]);
+const CONTROLLER_TYPES = new Set<IocalcControllerType>(IOCALC_CONTROLLER_TYPES);
+const COMMAND_SOURCES = new Set<IocalcCommandSource>(IOCALC_COMMAND_SOURCES);
 const TRANSPORTS = new Set<IocalcTransport>(["manual", "browser", "http", "mcp", "local-core"]);
 const SESSION_STATUS = new Set(["active", "completed", "expired", "revoked"]);
 const EVENT_TYPES = new Set<IocalcAgentGovernanceEventType>([
@@ -249,7 +260,30 @@ const FORBIDDEN_COMPACT_TERMS = [
 ];
 const URL_OR_SCHEME = /\b(?:[a-z][a-z0-9+.-]*:(?:\/\/)?|www\.)\S*/i;
 const EXECUTABLE_TEXT = /```|<script\b|<\/script>|(?:^|\s)(?:sudo|bash|sh|python|node)\s+-/i;
-const LEDGER_KEYS = new Set(["schemaVersion", "project", "ledgerId", "generatedAt", "policy", "sessions", "entries", "latestDigest"]);
+const LEDGER_KEYS = new Set([
+  "schemaVersion",
+  "project",
+  "ledgerId",
+  "generatedAt",
+  "scenarioId",
+  "scenario",
+  "policy",
+  "sessions",
+  "entries",
+  "latestDigest"
+]);
+const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SCENARIO_KEYS = new Set([
+  "id",
+  "label",
+  "setupVersion",
+  "sandboxOnly",
+  "notFinancialAdvice",
+  "notInvestmentProduct",
+  "publicRoutesCanSpendCredits",
+  "wiredIntoResolver",
+  "setupText"
+]);
 const POLICY_KEYS = new Set([
   "sandboxOnly",
   "submittedTextIsUntrusted",
@@ -422,6 +456,7 @@ export function assertAgentGovernanceLedger(ledger: IocalcAgentGovernanceLedger)
   }
   assertSafeGovernanceId(ledger.ledgerId, "ledgerId");
   assertIsoDate(ledger.generatedAt, "generatedAt");
+  assertLedgerScenario(ledger.scenarioId, ledger.scenario);
   assertAgentGovernancePolicy(ledger.policy);
   if (!Array.isArray(ledger.sessions) || ledger.sessions.length > 100) {
     throw new Error("Unsafe agent governance ledger: sessions must be bounded.");
@@ -555,6 +590,75 @@ function assertAgentGovernancePolicy(policy: IocalcAgentGovernancePolicy): void 
     policy.humanReviewRequiredForAuthorityChanges !== true
   ) {
     throw new Error("Unsafe agent governance policy: required safety boundary is disabled.");
+  }
+}
+
+function assertLedgerScenario(scenarioId: unknown, scenario: unknown): void {
+  if (scenarioId !== undefined && scenarioId !== "") {
+    if (typeof scenarioId !== "string" || scenarioId.length > 80 || !SCENARIO_ID_PATTERN.test(scenarioId)) {
+      throw new Error("Unsafe agent governance ledger: scenarioId must be a scenario seed slug.");
+    }
+  }
+  if (scenario === undefined || scenario === null) {
+    if (typeof scenarioId === "string" && scenarioId !== "") {
+      throw new Error("Unsafe agent governance ledger: scenarioId requires a matching scenario record.");
+    }
+    return;
+  }
+  if (typeof scenario !== "object" || Array.isArray(scenario)) {
+    throw new Error("Unsafe agent governance ledger: scenario must be a scenario record.");
+  }
+  assertKnownGovernanceKeys(scenario, SCENARIO_KEYS, "scenario");
+  const record = scenario as IocalcGameScenarioRecord;
+  if (record.setupVersion !== IOCALC_GAME_SCENARIO_SETUP_VERSION) {
+    throw new Error("Unsafe agent governance ledger: unsupported scenario setup version.");
+  }
+  if (
+    record.sandboxOnly !== true ||
+    record.notFinancialAdvice !== true ||
+    record.notInvestmentProduct !== true ||
+    record.publicRoutesCanSpendCredits !== false ||
+    record.wiredIntoResolver !== true
+  ) {
+    throw new Error("Unsafe agent governance ledger: scenario record weakens sandbox safety declarations.");
+  }
+  if (typeof record.id !== "string" || record.id.length < 1 || record.id.length > 80 || !SCENARIO_ID_PATTERN.test(record.id)) {
+    throw new Error("Unsafe agent governance ledger: scenario.id must be a scenario seed slug.");
+  }
+  if (scenarioId !== record.id) {
+    throw new Error("Unsafe agent governance ledger: scenario.id must match scenarioId.");
+  }
+  assertScenarioCatalogText(record.label, "scenario.label", 80);
+  assertScenarioCatalogText(record.setupText, "scenario.setupText", 240);
+}
+
+// Exact server-authored scenario-catalog strings that legitimately trip the
+// forbidden-vocabulary filter with benign English words: "Code governance
+// fault" matches \bcode\b, and the policy-uncertainty setupText matches \bbase\b
+// ("base/downside comparison"). These pinned constants are the ONLY scenario
+// text exempt from the term filter; every other scenario.label/setupText must
+// still pass the same hasUnsafeGovernanceText check as all other ledger text,
+// so wallet/secret/authority-expansion prose stays blocked. Keep this list in
+// lockstep with the server catalog (iso-ai-game GAME_SCENARIO_SETUPS): a new
+// scenario whose text trips the filter fails conformance loudly until its exact
+// string is reviewed and added here.
+const SCENARIO_CATALOG_TEXT_ALLOWLIST = new Set<string>([
+  "Code governance fault",
+  "Pressure and rules feel unsettled, rewarding assumption updates and base/downside comparison."
+]);
+
+function assertScenarioCatalogText(value: unknown, field: string, maxLength: number): void {
+  if (typeof value !== "string" || value.length < 1 || value.length > maxLength) {
+    throw new Error(`Unsafe agent governance ledger: ${field} must be bounded text.`);
+  }
+  if (!SAFE_TEXT.test(value) || URL_OR_SCHEME.test(value) || EXECUTABLE_TEXT.test(value)) {
+    throw new Error(`Unsafe agent governance ledger: ${field} contains unsafe text.`);
+  }
+  if (SCENARIO_CATALOG_TEXT_ALLOWLIST.has(value)) {
+    return;
+  }
+  if (hasUnsafeGovernanceText(value)) {
+    throw new Error(`Unsafe agent governance ledger: ${field} contains unsafe text.`);
   }
 }
 

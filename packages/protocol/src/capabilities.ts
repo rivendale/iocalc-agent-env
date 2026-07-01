@@ -173,7 +173,18 @@ const MANIFEST_BOUNDARY_KEYS = new Set([
   "at"
 ]);
 const COMMAND_REQUEST_KEYS = new Set(["contentType", "fields", "allowedCommandVocabulary", "maxCommandChars"]);
-const COMMAND_REQUEST_FIELD_KEYS = new Set(["sandboxId", "mode", "agentName", "command", "seed"]);
+// Single source of truth for the manifest command-request field allowlist,
+// shared with the MCP connector so its sanitized manifest cannot drop a field
+// the validator accepts (or vice versa).
+export const IOCALC_COMMAND_REQUEST_FIELD_KEYS = [
+  "sandboxId",
+  "mode",
+  "agentName",
+  "command",
+  "seed",
+  "scenarioId"
+] as const;
+const COMMAND_REQUEST_FIELD_KEYS = new Set<string>(IOCALC_COMMAND_REQUEST_FIELD_KEYS);
 const AGENT_TRIAL_REQUEST_KEYS = new Set(["contentType", "fields"]);
 const AGENT_TRIAL_REQUEST_FIELD_KEYS = new Set(["sandboxId", "agentA", "agentB", "seasons", "seed"]);
 const SAFE_RESPONSE_FIELD_PATH = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/;
@@ -320,7 +331,7 @@ export function assertSandboxGameApiManifest(manifest: IocalcGameApiManifest): v
       assertSafeManifestMetadataText(route.body, "route.body", 80);
     }
     if (route.query !== undefined) {
-      if (!ROUTES_WITH_SANDBOX_QUERY.has(routeKey) || route.query.length !== 1 || route.query[0] !== "sandboxId") {
+      if (!ROUTES_WITH_SANDBOX_QUERY.has(routeKey) || !isSafeManifestRouteQuery(route.query)) {
         throw new Error("Unsafe game API manifest: unsupported query fields");
       }
     }
@@ -408,6 +419,13 @@ export function assertSandboxGameApiManifest(manifest: IocalcGameApiManifest): v
     assertSandboxBoundaryDecision(manifest.boundary);
     assertSafeManifestBoundaryDecision(manifest.boundary);
   }
+}
+
+function isSafeManifestRouteQuery(query: string[]): boolean {
+  if (query.length === 1) {
+    return query[0] === "sandboxId";
+  }
+  return query.length === 2 && query[0] === "sandboxId" && query[1] === "scenarioId";
 }
 
 function assertKnownObjectKeys(value: object, allowedKeys: Set<string>, field: string): void {

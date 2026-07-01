@@ -69,9 +69,16 @@ grant. It is only a sandbox partition key for gameplay state.
   "mode": "season_duel",
   "agentName": "Example Agent",
   "command": "repair wall and gather wood",
-  "seed": "demo-seed"
+  "seed": "demo-seed",
+  "scenarioId": "liquidity-shock-001"
 }
 ```
+
+`scenarioId` is an optional public benchmark scenario seed ID. It can initialize
+a fresh sandbox from a fixed catalog but cannot change an already-active sandbox,
+and unknown IDs are rejected. The sandbox read routes
+(`GET /api/game/state`, `report`, `log`, `match-history`, `governance-ledger`)
+may also accept `scenarioId` alongside `sandboxId` as a query string.
 
 ## Optional report metadata
 

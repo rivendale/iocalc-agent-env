@@ -1,6 +1,9 @@
 import { HttpIocalcAdapter, type HttpIocalcAdapterOptions } from "@iocalc/adapters";
 import {
   DEFAULT_SAFE_CAPABILITIES,
+  IOCALC_COMMAND_REQUEST_FIELD_KEYS,
+  IOCALC_COMMAND_SOURCES,
+  IOCALC_CONTROLLER_TYPES,
   assertAgentGovernanceLedger,
   assertSafeCapabilities,
   assertSandboxGameApiManifest,
@@ -221,8 +224,8 @@ const MANIFEST_ROUTE_SIDE_EFFECTS = new Map<string, string>([
   ["GET /api/game/governance-ledger", "none"],
   ["POST /api/game/agent-trial", "sandbox-trial-state-only"]
 ]);
-const CONTROLLER_TYPES = new Set(["human", "advisor-fallback", "local-heuristic-ai", "scripted-agent", "future-remote-agent"]);
-const COMMAND_SOURCES = new Set(["human", "ai", "fallback", "scripted", "manual", "browser", "http", "mcp", "local-core"]);
+const CONTROLLER_TYPES = new Set<string>(IOCALC_CONTROLLER_TYPES);
+const COMMAND_SOURCES = new Set<string>(IOCALC_COMMAND_SOURCES);
 const TRANSPORTS = new Set(["manual", "browser", "http", "mcp", "local-core"]);
 const TRANSCRIPT_EVENT_TYPES = new Set(["state", "command", "resolution", "report", "log", "error"]);
 const FORBIDDEN_MCP_TEXT =
@@ -273,7 +276,7 @@ const CANONICAL_AGENT_ID_PATTERN = /^iocalc-(?:agent|guide|runner|referee)-[0-9]
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,78}[A-Za-z0-9])?$/;
 const SECRET_SANDBOX_PATTERN =
   /(?:api[._-]*key|private[._-]*key|seed[._-]*phrase|mnemonic|password|(?:access|auth|bearer|oauth|refresh)[._-]*token|token|secret|credential|passwd)/i;
-const COMMAND_REQUEST_FIELD_KEYS = ["sandboxId", "mode", "agentName", "command", "seed"];
+const COMMAND_REQUEST_FIELD_KEYS = [...IOCALC_COMMAND_REQUEST_FIELD_KEYS];
 const AGENT_TRIAL_REQUEST_FIELD_KEYS = ["sandboxId", "agentA", "agentB", "seasons", "seed"];
 const PROTOTYPE_RESULT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const SAFE_RESPONSE_FIELD_PATH = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/;
