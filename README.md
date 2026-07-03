@@ -15,6 +15,13 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 
 - `docs/loop-engineering.md` — IOCALC loop vocabulary for observe, command,
   resolve, verify, and revise cycles.
+- `docs/harness-gap-checklist.md` — reference-informed checklist for loop,
+  context, tools, boundaries, multi-agent coordination, memory, and
+  observability gaps.
+- `docs/local-multi-agent-coordination-spike.md` — local-only plan for
+  manager/worker/inspector coordination evidence without new authority.
+- `docs/mcp-inspector.md` — dev-only MCP Inspector workflow for the existing
+  sandbox stdio bridge.
 - `docs/game-theory-patterns.md` — safe sandbox game-theory patterns for
   settlement strategy and agent learning.
 - `docs/agent-governance-ledger.md` — sandbox-only evidence ledger for agent
@@ -133,6 +140,10 @@ The stdio wrapper speaks JSON-RPC over stdin/stdout and supports `initialize`,
 `ping`, `tools/list`, and `tools/call`. It does not bind a port, hold secrets,
 or add any tool authority beyond `createIocalcHttpMcpToolBridge`. Installed
 packages can use the `iocalc-mcp-server` binary.
+
+For interactive local debugging of the stdio wrapper, see
+`docs/mcp-inspector.md` or run `pnpm mcp:inspect` with `IOCALC_BASE_URL` and
+`IOCALC_SANDBOX_ID` set for a local sandbox.
 
 ## Safety boundary
 

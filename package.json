@@ -8,6 +8,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "check": "pnpm -r check",
+    "mcp:inspect": "pnpm --filter @iocalc/mcp-server build && npx @modelcontextprotocol/inspector node packages/mcp-server/dist/stdio.js",
     "smoke": "pnpm build && node tests/smoke.mjs",
     "test": "pnpm -r test && pnpm smoke"
   },
