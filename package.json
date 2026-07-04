@@ -7,7 +7,7 @@
   "description": "Open-source IOCALC agent environment protocol, adapters, conformance tests, and MCP bridge.",
   "scripts": {
     "build": "pnpm -r build",
-    "check": "pnpm -r check && pnpm license:check",
+    "check": "pnpm build && pnpm -r check && pnpm license:check",
     "contracts:generate": "pnpm build && node tools/generate_contract_snapshots.mjs",
     "contracts:check": "pnpm contracts:generate && git diff --exit-code -- schemas",
     "license:check": "node tools/license_check.mjs",

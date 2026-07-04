@@ -89,7 +89,40 @@
       "stable equilibrium",
       "fallback equilibrium",
       "payoff matrix"
-    ]
+    ],
+    "guardian": {
+      "policyVersion": "iocalc-guardian-policy-v1",
+      "trustZones": [
+        "trusted-operator",
+        "maintainer-reviewed",
+        "sandbox-gameplay",
+        "agent-memory",
+        "model-output",
+        "untrusted-issue",
+        "untrusted-pr",
+        "untrusted-comment",
+        "untrusted-web",
+        "untrusted-artifact"
+      ],
+      "verdicts": [
+        "allow",
+        "review",
+        "quarantine",
+        "block"
+      ],
+      "allowedSandboxTools": [
+        "iocalc.get_manifest",
+        "iocalc.get_capabilities",
+        "iocalc.get_state",
+        "iocalc.submit_command",
+        "iocalc.resolve_season",
+        "iocalc.get_report",
+        "iocalc.get_log",
+        "iocalc.get_match_history",
+        "iocalc.get_governance_ledger",
+        "iocalc.run_agent_trial"
+      ]
+    }
   },
   "mcp": {
     "toolNames": [

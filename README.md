@@ -8,7 +8,7 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 
 - `@iocalc/protocol` — shared types, safe capabilities, transcript helpers, and runtime command validation.
 - `@iocalc/adapters` — manual transcript, HTTP, browser, MCP, and local-core adapter implementations or stubs.
-- `@iocalc/conformance` — safety and compatibility assertions for IOCALC-compatible implementations.
+- `@iocalc/conformance` — safety, guardian, and compatibility assertions for IOCALC-compatible implementations.
 - `@iocalc/mcp-server` — MCP tool bridge and opt-in stdio wrapper exposing sandbox game tools only.
 
 ## Design docs
@@ -30,6 +30,8 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
   settlement strategy and agent learning.
 - `docs/agent-governance-ledger.md` — sandbox-only evidence ledger for agent
   sessions, boundary decisions, conformance checks, and adversarial reviews.
+- `docs/agent-harness-guardians.md` — deterministic guardian checks for prompt
+  poisoning, tool authority, workflow token, and untrusted input boundaries.
 
 ## Agent-readable metadata
 
@@ -55,6 +57,14 @@ Agent governance ledgers may record sandbox sessions, tool calls, failure-state
 routes, contamination signals, risk bands, conformance checks, and adversarial
 reviews. They are read-only evidence records and do not grant identity,
 account, wallet, production, feedback trust, or financial authority.
+
+Harnesses can call `evaluateIocalcGuardian()` before model context assembly,
+tool execution, memory writes, or workflow actions. Guardian evaluations classify
+trust zones such as untrusted issues, PRs, comments, web pages, artifacts,
+agent memory, model output, and sandbox gameplay. Results return typed findings,
+`allow`/`review`/`quarantine`/`block` verdicts, explicit
+`safeToSendToModel`/`safeToExecuteTools` flags, a sanitized summary, and a
+sandbox boundary decision suitable for governance evidence.
 
 ## Core contract
 

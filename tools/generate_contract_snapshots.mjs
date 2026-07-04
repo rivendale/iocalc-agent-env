@@ -30,7 +30,24 @@ const contract = {
     forbiddenCapabilities: [...protocol.IOCALC_FORBIDDEN_CAPABILITIES],
     boundaryActions: [...protocol.IOCALC_BOUNDARY_ACTIONS],
     auditEventTypes: [...protocol.IOCALC_AUDIT_EVENT_TYPES],
-    recommendedGameTheoryPatterns: [...protocol.IOCALC_RECOMMENDED_GAME_THEORY_PATTERNS]
+    recommendedGameTheoryPatterns: [...protocol.IOCALC_RECOMMENDED_GAME_THEORY_PATTERNS],
+    guardian: {
+      policyVersion: protocol.IOCALC_GUARDIAN_POLICY_VERSION,
+      trustZones: [
+        "trusted-operator",
+        "maintainer-reviewed",
+        "sandbox-gameplay",
+        "agent-memory",
+        "model-output",
+        "untrusted-issue",
+        "untrusted-pr",
+        "untrusted-comment",
+        "untrusted-web",
+        "untrusted-artifact"
+      ],
+      verdicts: ["allow", "review", "quarantine", "block"],
+      allowedSandboxTools: [...protocol.DEFAULT_IOCALC_GUARDIAN_POLICY.allowedSandboxTools]
+    }
   },
   mcp: {
     toolNames: mcp.IOCALC_MCP_TOOLS.map((tool) => tool.name),
