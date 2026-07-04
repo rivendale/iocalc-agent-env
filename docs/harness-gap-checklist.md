@@ -63,6 +63,11 @@ functionality.
 ## Permissions and Boundaries
 
 - [ ] Every adapter publishes or implies an allowed capability scope.
+- [ ] Untrusted issues, PRs, comments, web pages, artifacts, agent memory, and
+  model output pass through `evaluateIocalcGuardian()` before they are sent to a
+  privileged model/tool loop.
+- [ ] Guardian `quarantine` and `block` verdicts stop tool execution and record
+  only sanitized summaries plus typed findings.
 - [ ] Forbidden capabilities are tested: wallet, private key, secret,
   deployment, production, account/session, arbitrary fetch, code execution,
   feedback trust mutation, and financial advice.
@@ -136,4 +141,3 @@ functionality.
 - Real financial recommendations.
 - Autonomous production deployment.
 - Tool access that expands beyond the sandbox contract.
-

@@ -8,6 +8,9 @@ Shared TypeScript contract for sandbox-only IOCALC agent clients.
 - Safe and forbidden capability types.
 - Runtime validators for game commands, capabilities, manifests, boundary
   decisions, audit events, and governance ledgers.
+- Guardian policy evaluation for prompt poisoning, secret/env exfiltration,
+  workflow-token authority, external fetches, code execution, and unsafe tool
+  requests.
 - Transcript helpers for observe, command, resolve, report, and log flows.
 
 ## Boundary
