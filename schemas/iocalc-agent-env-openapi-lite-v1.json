@@ -1,0 +1,279 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "IOCALC Sandbox Game API",
+    "version": "0.1.0",
+    "summary": "Sandbox-only API shape expected by iocalc-agent-env adapters."
+  },
+  "paths": {
+    "/api/game/manifest": {
+      "get": {
+        "summary": "Read sandbox game API manifest",
+        "responses": {
+          "200": {
+            "description": "Manifest"
+          }
+        }
+      }
+    },
+    "/api/game/capabilities": {
+      "get": {
+        "summary": "Read safe sandbox capabilities",
+        "responses": {
+          "200": {
+            "description": "Capabilities"
+          }
+        }
+      }
+    },
+    "/api/game/state": {
+      "get": {
+        "summary": "Read sandbox game state",
+        "parameters": [
+          {
+            "name": "sandboxId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Game state"
+          }
+        }
+      }
+    },
+    "/api/game/command": {
+      "post": {
+        "summary": "Submit sandbox game command",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command result"
+          }
+        }
+      }
+    },
+    "/api/game/resolve": {
+      "post": {
+        "summary": "Resolve deterministic sandbox season",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Season resolution"
+          }
+        }
+      }
+    },
+    "/api/game/report": {
+      "get": {
+        "summary": "Read current sandbox report",
+        "parameters": [
+          {
+            "name": "sandboxId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Season report"
+          }
+        }
+      }
+    },
+    "/api/game/log": {
+      "get": {
+        "summary": "Read sandbox system log",
+        "parameters": [
+          {
+            "name": "sandboxId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System log"
+          }
+        }
+      }
+    },
+    "/api/game/match-history": {
+      "get": {
+        "summary": "Read sandbox match history",
+        "parameters": [
+          {
+            "name": "sandboxId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Match history"
+          }
+        }
+      }
+    },
+    "/api/game/governance-ledger": {
+      "get": {
+        "summary": "Read optional sandbox governance ledger evidence",
+        "parameters": [
+          {
+            "name": "sandboxId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Governance ledger"
+          }
+        }
+      }
+    },
+    "/api/game/agent-trial": {
+      "post": {
+        "summary": "Run optional sandbox agent trial",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTrialRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent trial result"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CommandRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sandboxId": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "season_duel",
+              "agent_trials"
+            ]
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "type": "string"
+          },
+          "scenarioId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "command"
+        ]
+      },
+      "ResolveRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sandboxId": {
+            "type": "string"
+          },
+          "seed": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentTrialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sandboxId": {
+            "type": "string"
+          },
+          "agentA": {
+            "type": "string"
+          },
+          "agentB": {
+            "type": "string"
+          },
+          "seasons": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "seed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentA",
+          "agentB",
+          "seasons"
+        ]
+      }
+    }
+  },
+  "x-iocalc-boundary": {
+    "sandboxOnly": true,
+    "packageLicense": "MIT-0 OR Apache-2.0",
+    "forbiddenCapabilities": [
+      "walletActionsEnabled",
+      "feedbackCanMutateGameplay",
+      "externalUrlFetchEnabled",
+      "codeExecutionEnabled",
+      "secretsAccessEnabled",
+      "productionMutationEnabled"
+    ]
+  }
+}

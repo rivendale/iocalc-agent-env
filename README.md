@@ -13,6 +13,10 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 
 ## Design docs
 
+- `docs/open-source.md` — dual-license policy, reusable package surface, and
+  contributor metadata checks.
+- `docs/compatibility-matrix.md` — supported Node, pnpm, HTTP, browser, MCP, and
+  generated contract snapshot surfaces.
 - `docs/loop-engineering.md` — IOCALC loop vocabulary for observe, command,
   resolve, verify, and revise cycles.
 - `docs/harness-gap-checklist.md` — reference-informed checklist for loop,
@@ -169,3 +173,21 @@ Forbidden:
 ## Status
 
 Current open-source foundation. The protocol, HTTP/manual/browser adapters, SDK-adaptable MCP tool bridge, opt-in MCP stdio wrapper, manifest response checks, and read-only agent governance ledger support are designed to be ingested by `iocalc.com` / `play.iocalc.com` through stable UI selectors and `/api/game/*` sandbox endpoints.
+
+Useful local gates:
+
+```bash
+pnpm check
+pnpm contracts:generate
+pnpm contracts:check
+pnpm pack:dry-run
+pnpm test
+```
+
+## License
+
+Licensed under `MIT-0 OR Apache-2.0`.
+
+You may use the frictionless MIT-0 terms or the Apache 2.0 terms with an
+explicit patent grant. See [LICENSE-MIT-0](LICENSE-MIT-0) and
+[LICENSE-APACHE-2.0](LICENSE-APACHE-2.0).

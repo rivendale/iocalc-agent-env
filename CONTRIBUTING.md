@@ -23,6 +23,9 @@ pnpm build
 pnpm test
 ```
 
+Run `pnpm license:check` after adding packages or changing license files. All
+publishable workspace packages should advertise `MIT-0 OR Apache-2.0`.
+
 ## Package layout
 
 - `packages/protocol` defines the shared contract.

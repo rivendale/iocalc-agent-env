@@ -1,0 +1,290 @@
+{
+  "schemaVersion": "iocalc-agent-env-contract-snapshot-v1",
+  "source": "generated-from-workspace-build",
+  "packageLicense": "MIT-0 OR Apache-2.0",
+  "protocol": {
+    "transports": [
+      "manual",
+      "browser",
+      "http",
+      "mcp",
+      "local-core"
+    ],
+    "modes": [
+      "season_duel",
+      "agent_trials"
+    ],
+    "controllerTypes": [
+      "human",
+      "advisor-fallback",
+      "local-heuristic-ai",
+      "compounder-agent",
+      "scripted-agent",
+      "mcp-connector",
+      "future-remote-agent"
+    ],
+    "commandSources": [
+      "human",
+      "ai",
+      "fallback",
+      "scripted",
+      "compounder-agent",
+      "manual",
+      "browser",
+      "http",
+      "mcp",
+      "local-core"
+    ],
+    "commandRequestFieldKeys": [
+      "sandboxId",
+      "mode",
+      "agentName",
+      "command",
+      "seed",
+      "scenarioId"
+    ],
+    "safeCapabilities": [
+      "canReadState",
+      "canSubmitGameCommand",
+      "canResolveSeason",
+      "canReadReport"
+    ],
+    "forbiddenCapabilities": [
+      "walletActionsEnabled",
+      "feedbackCanMutateGameplay",
+      "externalUrlFetchEnabled",
+      "codeExecutionEnabled",
+      "secretsAccessEnabled",
+      "productionMutationEnabled"
+    ],
+    "boundaryActions": [
+      "read_manifest",
+      "read_capabilities",
+      "read_state",
+      "submit_command",
+      "resolve_season",
+      "read_report",
+      "read_log",
+      "read_match_history",
+      "run_agent_trial",
+      "reject_request"
+    ],
+    "auditEventTypes": [
+      "boundary-decision",
+      "state-read",
+      "command-submitted",
+      "command-rejected",
+      "season-resolved",
+      "report-read",
+      "log-read",
+      "history-read",
+      "agent-trial-run",
+      "request-rejected"
+    ],
+    "recommendedGameTheoryPatterns": [
+      "setup",
+      "signaling game",
+      "prisoner choice",
+      "crowded strategy",
+      "stable equilibrium",
+      "fallback equilibrium",
+      "payoff matrix"
+    ]
+  },
+  "mcp": {
+    "toolNames": [
+      "iocalc.get_manifest",
+      "iocalc.get_capabilities",
+      "iocalc.get_state",
+      "iocalc.submit_command",
+      "iocalc.resolve_season",
+      "iocalc.get_report",
+      "iocalc.get_log",
+      "iocalc.get_match_history",
+      "iocalc.get_governance_ledger",
+      "iocalc.run_agent_trial"
+    ],
+    "tools": [
+      {
+        "name": "iocalc.get_manifest",
+        "description": "Read the sandbox IOCALC game API manifest. Descriptive only; grants no wallet, production, account, or financial authority.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_capabilities",
+        "description": "Read sandbox IOCALC adapter capabilities. Must report wallet and production actions disabled.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_state",
+        "description": "Read sandbox IOCALC game state.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.submit_command",
+        "description": "Submit a sandbox seasonal game command. Does not touch wallets, secrets, feedback trust, or production state.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "season_duel",
+                "agent_trials"
+              ]
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200
+            },
+            "agentName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "sandboxId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,78}[A-Za-z0-9])?$"
+            },
+            "seed": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "mode",
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.resolve_season",
+        "description": "Resolve a deterministic sandbox IOCALC season.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sandboxId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,78}[A-Za-z0-9])?$"
+            },
+            "seed": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_report",
+        "description": "Read the current sandbox season report.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_log",
+        "description": "Read the sandbox system log.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_match_history",
+        "description": "Read sandbox match history.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.get_governance_ledger",
+        "description": "Read sandbox governance ledger evidence. Evidence is read-only and grants no gameplay, wallet, production, or account authority.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "iocalc.run_agent_trial",
+        "description": "Run a sandbox-only IOCALC agent trial when the target adapter supports it.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "agentA": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^iocalc-(?:agent|guide|runner|referee)-[0-9]{4}$"
+            },
+            "agentB": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^iocalc-(?:agent|guide|runner|referee)-[0-9]{4}$"
+            },
+            "seasons": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "sandboxId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,78}[A-Za-z0-9])?$"
+            },
+            "seed": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "agentA",
+            "agentB",
+            "seasons"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "outOfScope": [
+    "wallet actions",
+    "private-key handling",
+    "secrets access",
+    "feedback-to-gameplay mutation",
+    "arbitrary URL fetching",
+    "arbitrary code execution",
+    "deployment or production mutation",
+    "accounts or sessions",
+    "financial functionality or advice"
+  ]
+}

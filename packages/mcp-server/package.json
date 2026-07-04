@@ -2,8 +2,25 @@
   "name": "@iocalc/mcp-server",
   "version": "0.1.0",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "MIT-0 OR Apache-2.0",
   "description": "Sandbox-only IOCALC MCP bridge and opt-in stdio wrapper.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rivendale/iocalc-agent-env.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/rivendale/iocalc-agent-env#readme",
+  "bugs": {
+    "url": "https://github.com/rivendale/iocalc-agent-env/issues"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
