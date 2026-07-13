@@ -41,7 +41,9 @@
       "agentName",
       "command",
       "seed",
-      "scenarioId"
+      "scenarioId",
+      "rulesetVersion",
+      "orderPlan"
     ],
     "safeCapabilities": [
       "canReadState",
