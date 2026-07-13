@@ -182,7 +182,9 @@ export const IOCALC_COMMAND_REQUEST_FIELD_KEYS = [
   "agentName",
   "command",
   "seed",
-  "scenarioId"
+  "scenarioId",
+  "rulesetVersion",
+  "orderPlan"
 ] as const;
 const COMMAND_REQUEST_FIELD_KEYS = new Set<string>(IOCALC_COMMAND_REQUEST_FIELD_KEYS);
 const AGENT_TRIAL_REQUEST_KEYS = new Set(["contentType", "fields"]);
