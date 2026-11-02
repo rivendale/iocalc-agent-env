@@ -6,6 +6,7 @@ export interface IocalcMcpBridgeConformanceResult {
 
 interface IocalcMcpConformanceTool {
   name: string;
+  tier?: string;
   inputSchema?: {
     additionalProperties?: unknown;
   };
@@ -22,18 +23,20 @@ export interface IocalcMcpConformanceBridge {
   callTool(name: string, args?: unknown): Promise<IocalcMcpConformanceToolResult>;
 }
 
-const EXPECTED_MCP_TOOL_NAMES = [
-  "iocalc.get_manifest",
-  "iocalc.get_capabilities",
-  "iocalc.get_state",
-  "iocalc.submit_command",
-  "iocalc.resolve_season",
-  "iocalc.get_report",
-  "iocalc.get_log",
-  "iocalc.get_match_history",
-  "iocalc.get_governance_ledger",
-  "iocalc.run_agent_trial"
-];
+const EXPECTED_MCP_TOOL_TIERS = {
+  "iocalc.get_manifest": "read",
+  "iocalc.get_capabilities": "read",
+  "iocalc.get_state": "read",
+  "iocalc.submit_command": "act",
+  "iocalc.resolve_season": "act",
+  "iocalc.get_report": "read",
+  "iocalc.get_log": "read",
+  "iocalc.get_match_history": "read",
+  "iocalc.get_governance_ledger": "read",
+  "iocalc.run_agent_trial": "act"
+} as const;
+
+const EXPECTED_MCP_TOOL_NAMES = Object.keys(EXPECTED_MCP_TOOL_TIERS);
 
 const UNSAFE_ECHO_FRAGMENTS = [
   "api_key",
@@ -67,6 +70,7 @@ export async function runIocalcMcpToolBridgeConformance(
 ): Promise<IocalcMcpBridgeConformanceResult[]> {
   const results: IocalcMcpBridgeConformanceResult[] = [];
   results.push(checkToolList(bridge.tools));
+  results.push(checkToolTiers(bridge.tools));
   results.push(checkToolSchemasClosed(bridge.tools));
   results.push(
     await checkUnsafeCallRejected(
@@ -112,6 +116,22 @@ function checkToolList(tools: IocalcMcpConformanceTool[]): IocalcMcpBridgeConfor
     };
   }
   return { name: "mcp-tool-list", passed: true };
+}
+
+function checkToolTiers(tools: IocalcMcpConformanceTool[]): IocalcMcpBridgeConformanceResult {
+  const tiers = new Map(tools.map((tool) => [tool.name, tool.tier]));
+  const mismatched = EXPECTED_MCP_TOOL_NAMES.filter(
+    (name) => tiers.get(name) !== EXPECTED_MCP_TOOL_TIERS[name as keyof typeof EXPECTED_MCP_TOOL_TIERS]
+  );
+  const unexpected = tools.some((tool) => !(tool.name in EXPECTED_MCP_TOOL_TIERS));
+  if (mismatched.length > 0 || unexpected || tiers.size !== EXPECTED_MCP_TOOL_NAMES.length) {
+    return {
+      name: "mcp-tool-tiers",
+      passed: false,
+      message: "Each MCP tool must carry its Herald-inspired read or act tier."
+    };
+  }
+  return { name: "mcp-tool-tiers", passed: true };
 }
 
 function checkToolSchemasClosed(tools: IocalcMcpConformanceTool[]): IocalcMcpBridgeConformanceResult {

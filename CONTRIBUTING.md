@@ -4,7 +4,7 @@ Thanks for contributing to IOCALC Agent Env.
 
 ## Project rules
 
-Contributions must preserve the sandbox-only boundary:
+Contributions must preserve the sandbox-only boundary. See `AGENTS.md` for those boundaries and for the read or act tier on each MCP tool.
 
 - no wallet actions
 - no private-key handling

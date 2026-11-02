@@ -13,6 +13,7 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
 
 ## Design docs
 
+- `AGENTS.md`. Agent instructions for the `SECURITY.md` lists and MCP tool tiers.
 - `docs/open-source.md` — dual-license policy, reusable package surface, and
   contributor metadata checks.
 - `docs/compatibility-matrix.md` — supported Node, pnpm, HTTP, browser, MCP, and

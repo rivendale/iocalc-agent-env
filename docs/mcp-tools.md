@@ -17,6 +17,25 @@ iocalc.get_governance_ledger
 iocalc.run_agent_trial
 ```
 
+## Permission tiers
+
+Each MCP tool carries a Herald-inspired tier label. The label is `read` or `act`. It is stored on the tool as `tier`.
+
+A `read` tool only observes sandbox state. An `act` tool may change sandbox game state. Neither tier may use wallet paths, secrets paths, or production paths.
+
+| Tool | Tier |
+| --- | --- |
+| `iocalc.get_manifest` | read |
+| `iocalc.get_capabilities` | read |
+| `iocalc.get_state` | read |
+| `iocalc.submit_command` | act |
+| `iocalc.resolve_season` | act |
+| `iocalc.get_report` | read |
+| `iocalc.get_log` | read |
+| `iocalc.get_match_history` | read |
+| `iocalc.get_governance_ledger` | read |
+| `iocalc.run_agent_trial` | act |
+
 ## Tool boundary
 
 MCP tools may only operate on sandbox game state. They must not expose wallet actions, private keys, secrets, production mutation, deployment mutation, arbitrary URL fetching, code execution, feedback trust mutation, or financial functionality.
@@ -62,6 +81,7 @@ instead of reflecting caller-controlled text.
 Use `runIocalcMcpToolBridgeConformance(bridge)` to check an MCP bridge for the
 fixed sandbox tool list, closed input schemas, unsafe tool rejection, and
 non-reflection of URL, wallet-like, or key-like probe strings in error output.
+It also checks that each tool keeps its read or act tier.
 The helper calls only MCP tool methods and does not grant any additional
 adapter, wallet, account, feedback, deployment, or production authority.
 

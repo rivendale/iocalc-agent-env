@@ -17,6 +17,8 @@ and run sandbox agent trials when supported. It rejects wallet, private key,
 secret, production deployment, arbitrary URL fetch, code execution, feedback
 trust, account, session, and financial requests.
 
+Each tool carries a `tier` of `read` or `act`. Read tools observe sandbox state. Act tools may change sandbox game state only. Wallet, secret, and production paths stay forbidden.
+
 ## License
 
 `MIT-0 OR Apache-2.0`
