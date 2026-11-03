@@ -22,6 +22,7 @@ The conformance package verifies that an adapter or IOCALC-compatible implementa
   IOCALC sandbox tool list, closed input schemas, rejection of unsafe probes,
   and non-reflection of URL/key-like/wallet-like caller-controlled text in
   error results.
+- The MCP helper also checks that each tool keeps its `read` or `act` tier.
 - Agent governance ledgers can run `runAgentGovernanceLedgerConformance()` to
   verify sandbox-only policy, safe boundaries, non-reflection of unsafe probe
   text, and evidence-chain continuity.

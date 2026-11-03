@@ -29,9 +29,12 @@ import {
 
 export * from "./conformance.js";
 
+export type IocalcMcpToolTier = "read" | "act";
+
 export interface IocalcMcpToolSpec {
   name: IocalcMcpToolName;
   description: string;
+  tier: IocalcMcpToolTier;
   inputSchema: {
     type: "object";
     properties: Record<string, unknown>;
@@ -106,21 +109,25 @@ const SANDBOX_ID_SCHEMA = {
 export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
   {
     name: "iocalc.get_manifest",
+    tier: "read",
     description: "Read the sandbox IOCALC game API manifest. Descriptive only; grants no wallet, production, account, or financial authority.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.get_capabilities",
+    tier: "read",
     description: "Read sandbox IOCALC adapter capabilities. Must report wallet and production actions disabled.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.get_state",
+    tier: "read",
     description: "Read sandbox IOCALC game state.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.submit_command",
+    tier: "act",
     description: "Submit a sandbox seasonal game command. Does not touch wallets, secrets, feedback trust, or production state.",
     inputSchema: {
       type: "object",
@@ -137,6 +144,7 @@ export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
   },
   {
     name: "iocalc.resolve_season",
+    tier: "act",
     description: "Resolve a deterministic sandbox IOCALC season.",
     inputSchema: {
       type: "object",
@@ -149,26 +157,31 @@ export const IOCALC_MCP_TOOLS: IocalcMcpToolSpec[] = [
   },
   {
     name: "iocalc.get_report",
+    tier: "read",
     description: "Read the current sandbox season report.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.get_log",
+    tier: "read",
     description: "Read the sandbox system log.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.get_match_history",
+    tier: "read",
     description: "Read sandbox match history.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.get_governance_ledger",
+    tier: "read",
     description: "Read sandbox governance ledger evidence. Evidence is read-only and grants no gameplay, wallet, production, or account authority.",
     inputSchema: EMPTY_OBJECT_SCHEMA
   },
   {
     name: "iocalc.run_agent_trial",
+    tier: "act",
     description: "Run a sandbox-only IOCALC agent trial when the target adapter supports it.",
     inputSchema: {
       type: "object",
@@ -422,7 +435,7 @@ export function createIocalcMcpServerScaffold(adapter: IocalcPlayerAdapter) {
     status: "sdk-adapter-ready",
     tools: IOCALC_MCP_TOOLS,
     bridge: createIocalcMcpToolBridge(adapter),
-    note: "Wire this bridge to an MCP SDK transport or the opt-in stdio wrapper. Keep all tools sandbox-only."
+    note: "Wire this bridge to an MCP SDK transport or the opt-in stdio wrapper. Keep all tools sandbox-only. Each tool carries a read or act tier."
   };
 }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   DEFAULT_SAFE_CAPABILITIES,
@@ -2396,6 +2397,35 @@ assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.submit_comman
 assert.equal(IOCALC_MCP_TOOLS.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
 assert.equal(IOCALC_MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false), true);
 
+const mcpToolTiers = {
+  "iocalc.get_manifest": "read",
+  "iocalc.get_capabilities": "read",
+  "iocalc.get_state": "read",
+  "iocalc.submit_command": "act",
+  "iocalc.resolve_season": "act",
+  "iocalc.get_report": "read",
+  "iocalc.get_log": "read",
+  "iocalc.get_match_history": "read",
+  "iocalc.get_governance_ledger": "read",
+  "iocalc.run_agent_trial": "act"
+};
+assert.deepEqual(
+  Object.fromEntries(IOCALC_MCP_TOOLS.map((tool) => [tool.name, tool.tier])),
+  mcpToolTiers
+);
+const agentsMd = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
+const mcpToolsDoc = readFileSync(new URL("../docs/mcp-tools.md", import.meta.url), "utf8");
+assert.equal(agentsMd.includes("SECURITY.md"), true);
+assert.equal(agentsMd.includes("docs/mcp-tools.md"), true);
+assert.match(agentsMd, /\bwallet\b/i);
+assert.match(agentsMd, /\bsecrets\b/i);
+assert.match(agentsMd, /\bproduction\b/i);
+for (const [name, tier] of Object.entries(mcpToolTiers)) {
+  const row = `| \`${name}\` | ${tier} |`;
+  assert.equal(agentsMd.includes(row), true);
+  assert.equal(mcpToolsDoc.includes(row), true);
+}
+
 const mcpBridge = createIocalcMcpToolBridge(fakeMcpAdapter);
 const mcpManifest = await mcpBridge.callTool("iocalc.get_manifest");
 assert.equal(mcpManifest.isError, undefined);
@@ -2837,6 +2867,7 @@ const stdioInitialize = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
 assert.equal(stdioInitialize.result.protocolVersion, IOCALC_MCP_PROTOCOL_VERSION);
 assert.equal(stdioInitialize.result.capabilities.tools.listChanged, false);
 assert.equal(stdioInitialize.result.instructions.includes("wallet"), true);
+assert.equal(stdioInitialize.result.instructions.includes("labeled read or act"), true);
 
 const stdioTools = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
   jsonrpc: "2.0",
@@ -2851,6 +2882,10 @@ const stdioTools = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
 assert.equal(stdioTools.result.tools.some((tool) => tool.name === "iocalc.submit_command"), true);
 assert.equal(stdioTools.result.tools.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
 assert.equal(stdioTools.result.tools.every((tool) => tool.inputSchema.additionalProperties === false), true);
+assert.deepEqual(
+  Object.fromEntries(stdioTools.result.tools.map((tool) => [tool.name, tool.tier])),
+  mcpToolTiers
+);
 
 const stdioToolCall = await handleIocalcMcpJsonRpcRequest(mcpBridge, {
   jsonrpc: "2.0",
@@ -2989,6 +3024,10 @@ try {
   const spawnedTools = JSON.parse(await stdioLines.nextLine());
   assert.equal(spawnedTools.result.tools.some((tool) => tool.name === "iocalc.get_capabilities"), true);
   assert.equal(spawnedTools.result.tools.some((tool) => tool.name === "iocalc.get_governance_ledger"), true);
+  assert.deepEqual(
+    Object.fromEntries(spawnedTools.result.tools.map((tool) => [tool.name, tool.tier])),
+    mcpToolTiers
+  );
 
   sendJsonRpcLine(stdioChild, 13, "tools/call", {
     name: "iocalc.get_capabilities",

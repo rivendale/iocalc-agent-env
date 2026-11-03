@@ -45,7 +45,7 @@ export interface IocalcMcpStdioCliOptions extends Pick<HttpIocalcAdapterOptions,
 const JSON_RPC_VERSION = "2.0";
 const MAX_STDIO_MESSAGE_CHARS = 65536;
 const SAFE_SERVER_INSTRUCTIONS =
-  "IOCALC MCP exposes sandbox game tools only: read state, submit inert commands, resolve seasons, read reports/logs/history, and run sandbox trials. It grants no wallet, secret, account, feedback-trust, deployment, production, code-execution, arbitrary URL, or financial authority.";
+  "IOCALC MCP exposes sandbox game tools only: read state, submit inert commands, resolve seasons, read reports/logs/history, and run sandbox trials. Each tool is labeled read or act. It grants no wallet, secret, account, feedback-trust, deployment, production, code-execution, arbitrary URL, or financial authority.";
 
 export async function runIocalcMcpStdioServer(options: IocalcMcpStdioServerOptions): Promise<void> {
   const input = options.input ?? process.stdin;
@@ -180,6 +180,7 @@ function createToolsListResult(bridge: IocalcMcpToolBridge, params: unknown): Re
         ? []
         : bridge.tools.map((tool) => ({
             name: tool.name,
+            tier: tool.tier,
             description: tool.description,
             inputSchema: tool.inputSchema
           }))

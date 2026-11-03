@@ -52,6 +52,7 @@ functionality.
 ## Tool Interface
 
 - [ ] MCP tools remain a thin bridge over the same adapter contract.
+- [ ] Each MCP tool carries a Herald-inspired `read` or `act` tier.
 - [ ] Tool schemas are closed and reject unexpected fields.
 - [ ] Tool errors do not reflect caller-controlled unsafe strings.
 - [ ] Read tools are read-only and accept no arguments unless the contract
