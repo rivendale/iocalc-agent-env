@@ -33,6 +33,9 @@ IOCALC Agent Env is intentionally sandbox-only. It defines how agents can read g
   sessions, boundary decisions, conformance checks, and adversarial reviews.
 - `docs/agent-harness-guardians.md` — deterministic guardian checks for prompt
   poisoning, tool authority, workflow token, and untrusted input boundaries.
+- `docs/compute-provider.md` — Phase 1 `ComputeProvider` interface,
+  `SimulatedProvider` play-credit receipts, and draft OpenAPI fields.
+  `realMoneyPaymentsEnabled` stays false.
 
 ## Agent-readable metadata
 
