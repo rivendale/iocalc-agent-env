@@ -32,6 +32,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm check"
+    "test": "pnpm check && pnpm build && node --test test/compute-provider.test.mjs"
   }
 }

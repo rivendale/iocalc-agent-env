@@ -12,6 +12,9 @@ Shared TypeScript contract for sandbox-only IOCALC agent clients.
   workflow-token authority, external fetches, code execution, and unsafe tool
   requests.
 - Transcript helpers for observe, command, resolve, report, and log flows.
+- `ComputeProvider` and `SimulatedProvider` for in-process play-credit planning.
+  Receipts use `trustKind: "simulated"`. `realMoneyPaymentsEnabled` stays false.
+  See `docs/compute-provider.md`.
 
 ## Boundary
 

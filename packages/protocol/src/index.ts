@@ -4,3 +4,4 @@ export * from "./transcript.js";
 export * from "./validation.js";
 export * from "./governance.js";
 export * from "./guardian.js";
+export * from "./compute.js";
