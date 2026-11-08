@@ -62,7 +62,7 @@ test("simulated pricing quote is deterministic and does not deduct", () => {
     prompt: "a".repeat(200),
     budgetCredits: 1000
   });
-  assert.deepEqual(capped, { inputTokens: 50, outputTokens: 32, costCredits: 82 });
+  assert.deepEqual(capped, { inputTokens: 50, outputTokens: 24, costCredits: 74 });
 
   const tighter = quoteSimulatedPlan({
     ...baseRequest,
@@ -73,6 +73,50 @@ test("simulated pricing quote is deterministic and does not deduct", () => {
   assert.deepEqual(tighter, { inputTokens: 50, outputTokens: 8, costCredits: 58 });
   assert.equal(ledger.remaining(scope), before);
   assert.throws(() => quoteSimulatedPlan({ ...baseRequest, prompt: "" }));
+});
+
+test("one output token refuses advice beyond four characters", async () => {
+  const ledger = grant(100);
+  const provider = new SimulatedProvider(ledger);
+  const request = { ...baseRequest, prompt: "abcd", maxTokens: 1 };
+  const response = await provider.plan(request);
+  assert.equal(response.error, undefined);
+  assert.equal(response.text, "Seas");
+  assert.equal(response.provenance.outputTokens, Math.ceil(response.text.length / 4));
+  assert.deepEqual(quoteSimulatedPlan(request), { inputTokens: 1, outputTokens: 1, costCredits: 2 });
+  assert.equal(ledger.remaining(scope), 98);
+  assert.equal(await provider.verify(response.provenance), true);
+});
+
+test("output usage charges only returned advice when the cap exceeds its length", async () => {
+  const ledger = grant(1000);
+  const provider = new SimulatedProvider(ledger);
+  const request = { ...baseRequest, prompt: "a".repeat(200), maxTokens: 32 };
+  const response = await provider.plan(request);
+  const outputTokens = Math.ceil(response.text.length / 4);
+  assert.equal(response.provenance.outputTokens, outputTokens);
+  assert.equal(response.provenance.costCredits, 50 + outputTokens);
+  assert.equal(quoteSimulatedPlan(request).outputTokens, outputTokens);
+  assert.equal(ledger.remaining(scope), 1000 - 50 - outputTokens);
+  assert.equal(await provider.verify(response.provenance), true);
+});
+
+test("empty trust requirement refuses before any deduction", async () => {
+  let deductions = 0;
+  const ledger = grant(100);
+  const provider = new SimulatedProvider({
+    remaining: (value) => ledger.remaining(value),
+    deduct: (...args) => { deductions += 1; return ledger.deduct(...args); }
+  });
+  const response = await provider.plan({ ...baseRequest, requireTrust: [] });
+  assert.equal(response.error?.code, "trust_unavailable");
+  assert.equal(response.text, "");
+  assert.equal(response.provenance.trustKind, "none");
+  assert.equal(response.provenance.costCredits, 0);
+  assert.equal(Object.hasOwn(response.provenance, "receiptOrAttestationHash"), false);
+  assert.equal(deductions, 0);
+  assert.equal(ledger.remaining(scope), 100);
+  assertComputeResponse(response);
 });
 
 test("budget exhaustion fails closed without a partial deduction", async () => {

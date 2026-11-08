@@ -211,6 +211,7 @@ interface NormalizedComputeRequest {
   seasonOrStep: number;
   prompt: string;
   budgetCredits: number;
+  text: string;
   quote: SimulatedPlanQuote;
   trustSatisfied: boolean;
 }
@@ -378,7 +379,7 @@ function success(request: NormalizedComputeRequest): ComputeResponse {
     costCredits: request.quote.costCredits
   });
   const response: ComputeResponse = {
-    text: `Season ${request.seasonOrStep} sandbox plan. Repair, scout, and hold supplies. This advice is untrusted inert text.`,
+    text: request.text,
     provenance: {
       providerId: SIMULATED_PROVIDER_ID,
       modelId: SIMULATED_MODEL_ID,
@@ -443,6 +444,15 @@ function parseComputeRequest(request: ComputeRequest): ParseResult {
     return { ok: false, code: "invalid_request", message: INVALID_REQUEST };
   }
   const maxTokens = Object.hasOwn(fields, "maxTokens") ? (fields.maxTokens as number) : undefined;
+  const outputCap = Math.min(
+    maxTokens ?? SIMULATED_CREDIT_PRICE.defaultMaxOutputTokens,
+    SIMULATED_CREDIT_PRICE.defaultMaxOutputTokens,
+    Math.ceil(prompt.value.length / SIMULATED_CREDIT_PRICE.charsPerToken)
+  );
+  const text = `Season ${fields.seasonOrStep} sandbox plan. Repair, scout, and hold supplies. This advice is untrusted inert text.`.slice(
+    0,
+    outputCap * SIMULATED_CREDIT_PRICE.charsPerToken
+  );
   return {
     ok: true,
     value: {
@@ -451,7 +461,8 @@ function parseComputeRequest(request: ComputeRequest): ParseResult {
       seasonOrStep: fields.seasonOrStep,
       prompt: prompt.value,
       budgetCredits: fields.budgetCredits,
-      quote: quotePrompt(prompt.value, maxTokens),
+      text,
+      quote: quotePrompt(prompt.value, text),
       trustSatisfied: trust.satisfied
     }
   };
@@ -486,14 +497,12 @@ function readRequireTrust(fields: Record<string, unknown>): { ok: true; satisfie
   if (seen.size !== value.length) {
     return { ok: false };
   }
-  return { ok: true, satisfied: seen.size === 0 || seen.has("simulated") };
+  return { ok: true, satisfied: seen.has("simulated") };
 }
 
-function quotePrompt(prompt: string, maxTokens: number | undefined): SimulatedPlanQuote {
+function quotePrompt(prompt: string, text: string): SimulatedPlanQuote {
   const inputTokens = Math.max(1, Math.ceil(prompt.length / SIMULATED_CREDIT_PRICE.charsPerToken));
-  const requestedCap = maxTokens ?? SIMULATED_CREDIT_PRICE.defaultMaxOutputTokens;
-  const outputCap = Math.min(requestedCap, SIMULATED_CREDIT_PRICE.defaultMaxOutputTokens);
-  const outputTokens = Math.min(outputCap, inputTokens);
+  const outputTokens = Math.ceil(text.length / SIMULATED_CREDIT_PRICE.charsPerToken);
   const rawCost =
     inputTokens * SIMULATED_CREDIT_PRICE.creditsPerInputToken +
     outputTokens * SIMULATED_CREDIT_PRICE.creditsPerOutputToken;
