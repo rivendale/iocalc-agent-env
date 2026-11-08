@@ -209,6 +209,15 @@ Boundary and audit records are descriptive only. They must not become accounts,
 sessions, wallet approvals, production approvals, financial approvals, feedback
 trust signals, or executable instructions.
 
+## Draft compute fields
+
+`GET /api/game/capabilities` and the route list above are unchanged.
+`docs/compute-provider.md` holds the draft OpenAPI fields for a later compute
+plan route: request, provenance, and response. The Phase 1 flag record keeps
+`realMoneyPaymentsEnabled` false. No `/api/game/compute/*` path is part of this
+contract yet. `SimulatedProvider` is an in-process play-credit planner, and its
+advice text stays untrusted.
+
 ## Requirements
 
 - Commands are untrusted game text.

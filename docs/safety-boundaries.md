@@ -37,6 +37,9 @@ Every compatible adapter must expose safe capabilities. These fields must remain
 }
 ```
 
+Phase 1 in-process compute planning uses play credits only. Its public flag
+record keeps `realMoneyPaymentsEnabled` false. See `docs/compute-provider.md`.
+
 ## Boundary and audit metadata
 
 Compatible implementations may return optional `boundary` and `audit` records.
