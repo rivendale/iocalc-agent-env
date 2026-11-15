@@ -1,0 +1,11 @@
+# Triaged secret-scan findings: one fingerprint per line, each with the reason it is not a secret.
+# This file can only silence the exact findings named here; it cannot disable a rule or exempt a path.
+#
+# Commit bf99ec43 (a bot branch, later merged as PR #41) committed part of a pnpm content store by
+# mistake; a later commit on that branch removed it and main never held the file. The three hits are
+# lines 517, 520 and 523 of one store file: the "Public key ping-sha256" lines in the Node.js TLS
+# documentation example (certificate pins for github.com and two DigiCert CAs), which are public
+# values printed in public documentation, not credentials. Triaged 2026-11-15.
+bf99ec434a7d1edd13efb0d1c13850ec5715add3:C:\Users\nick\AppData\Local\pnpm\store\v3/v3/files/e4/1b94e2225610b740b072724d2ace09a609a70fa2e7875e232d2d5a0196161fc6dbb7fdc853518f00e53a0537e6768f5f6d37b14c8e4cb33b2c0d2564316ee5:generic-api-key:517
+bf99ec434a7d1edd13efb0d1c13850ec5715add3:C:\Users\nick\AppData\Local\pnpm\store\v3/v3/files/e4/1b94e2225610b740b072724d2ace09a609a70fa2e7875e232d2d5a0196161fc6dbb7fdc853518f00e53a0537e6768f5f6d37b14c8e4cb33b2c0d2564316ee5:generic-api-key:520
+bf99ec434a7d1edd13efb0d1c13850ec5715add3:C:\Users\nick\AppData\Local\pnpm\store\v3/v3/files/e4/1b94e2225610b740b072724d2ace09a609a70fa2e7875e232d2d5a0196161fc6dbb7fdc853518f00e53a0537e6768f5f6d37b14c8e4cb33b2c0d2564316ee5:generic-api-key:523
